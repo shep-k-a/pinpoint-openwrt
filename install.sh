@@ -562,43 +562,34 @@ create_init_script() {
     echo -e "${BLUE}Creating System Service${NC}"
     echo "----------------------------------------"
     
-    step "Creating init.d service..."
+    step "Creating PinPoint init.d service..."
     
     cat > /etc/init.d/pinpoint << 'INITEOF'
 #!/bin/sh /etc/rc.common
 
 START=99
 STOP=10
-USE_PROCD=1
 
-PROG=/usr/bin/python3
-PINPOINT_DIR=/opt/pinpoint/backend
-PIDFILE=/var/run/pinpoint.pid
-LOGFILE=/var/log/pinpoint/pinpoint.log
-
-start_service() {
-    procd_open_instance pinpoint
-    procd_set_param command $PROG -u main.py
-    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param pidfile $PIDFILE
-    procd_set_param directory $PINPOINT_DIR
-    procd_set_param file /opt/pinpoint/data/config.json
-    procd_close_instance
+start() {
+    echo "Starting PinPoint..."
+    cd /opt/pinpoint/backend
+    /usr/bin/python3 -u main.py > /var/log/pinpoint.log 2>&1 &
+    echo $! > /var/run/pinpoint.pid
 }
 
-stop_service() {
-    service_stop $PROG
+stop() {
+    echo "Stopping PinPoint..."
+    if [ -f /var/run/pinpoint.pid ]; then
+        kill $(cat /var/run/pinpoint.pid) 2>/dev/null
+        rm -f /var/run/pinpoint.pid
+    fi
+    killall python3 2>/dev/null || true
 }
 
-reload_service() {
+restart() {
     stop
+    sleep 1
     start
-}
-
-service_triggers() {
-    procd_add_reload_trigger "pinpoint"
 }
 INITEOF
 
@@ -607,7 +598,182 @@ INITEOF
     # Enable service
     /etc/init.d/pinpoint enable 2>/dev/null || true
     
-    info "Service created and enabled"
+    info "PinPoint service created"
+    
+    # Create sing-box init script (simple version)
+    step "Creating sing-box init.d service..."
+    
+    cat > /etc/init.d/sing-box << 'SBINIT'
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=15
+
+start() {
+    echo "Starting sing-box..."
+    /usr/bin/sing-box run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
+    echo $! > /var/run/sing-box.pid
+    # Initialize pinpoint routing after sing-box starts
+    sleep 3
+    [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+}
+
+stop() {
+    echo "Stopping sing-box..."
+    [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh stop
+    if [ -f /var/run/sing-box.pid ]; then
+        kill $(cat /var/run/sing-box.pid) 2>/dev/null
+        rm -f /var/run/sing-box.pid
+    fi
+    killall sing-box 2>/dev/null || true
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+SBINIT
+
+    chmod +x /etc/init.d/sing-box
+    /etc/init.d/sing-box enable 2>/dev/null || true
+    
+    info "sing-box service created"
+}
+
+# ============================================
+# Routing Setup
+# ============================================
+create_routing_scripts() {
+    echo ""
+    echo -e "${BLUE}Creating Routing Scripts${NC}"
+    echo "----------------------------------------"
+    
+    step "Creating pinpoint-init.sh..."
+    
+    cat > "$PINPOINT_DIR/scripts/pinpoint-init.sh" << 'ROUTESCRIPT'
+#!/bin/sh
+# PinPoint - Policy Routing Initialization Script
+
+MARK=0x100
+TABLE_ID=100
+TUN_IFACE="tun1"
+
+log() { echo "[pinpoint] $1"; }
+
+case "${1:-start}" in
+    start)
+        log "Initializing routing..."
+        
+        # Check tun interface
+        if ! ip link show "$TUN_IFACE" > /dev/null 2>&1; then
+            log "ERROR: $TUN_IFACE not found"
+            exit 1
+        fi
+        
+        # Setup policy routing
+        ip rule del fwmark $MARK lookup $TABLE_ID 2>/dev/null || true
+        ip route flush table $TABLE_ID 2>/dev/null || true
+        
+        grep -q "^$TABLE_ID" /etc/iproute2/rt_tables 2>/dev/null || \
+            echo "$TABLE_ID pinpoint" >> /etc/iproute2/rt_tables
+        
+        ip rule add fwmark $MARK lookup $TABLE_ID priority 100
+        ip route add default dev $TUN_IFACE table $TABLE_ID
+        
+        # Setup nftables
+        nft delete table inet pinpoint 2>/dev/null || true
+        nft -f - << 'NFT'
+table inet pinpoint {
+    set tunnel_ips { type ipv4_addr; flags timeout; timeout 1h; }
+    set tunnel_nets { type ipv4_addr; flags interval; }
+    
+    chain prerouting {
+        type filter hook prerouting priority mangle - 1; policy accept;
+        ip daddr @tunnel_ips meta mark set 0x100 counter
+        ip daddr @tunnel_nets meta mark set 0x100 counter
+    }
+    chain output {
+        type route hook output priority mangle - 1; policy accept;
+        ip daddr @tunnel_ips meta mark set 0x100 counter
+        ip daddr @tunnel_nets meta mark set 0x100 counter
+    }
+}
+NFT
+        log "Routing initialized"
+        ;;
+    stop)
+        log "Stopping routing..."
+        ip rule del fwmark $MARK lookup $TABLE_ID 2>/dev/null || true
+        ip route flush table $TABLE_ID 2>/dev/null || true
+        nft delete table inet pinpoint 2>/dev/null || true
+        log "Routing stopped"
+        ;;
+    status)
+        echo "=== Policy Routing ==="
+        ip rule show | grep -E "pinpoint|$TABLE_ID" || echo "No rules"
+        echo ""
+        echo "=== NFTables ==="
+        nft list table inet pinpoint 2>/dev/null || echo "Table not found"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status}"
+        ;;
+esac
+ROUTESCRIPT
+
+    chmod +x "$PINPOINT_DIR/scripts/pinpoint-init.sh"
+    
+    info "Routing scripts created"
+}
+
+# ============================================
+# sing-box Configuration
+# ============================================
+create_singbox_config() {
+    echo ""
+    echo -e "${BLUE}Creating sing-box Configuration${NC}"
+    echo "----------------------------------------"
+    
+    step "Creating default sing-box config..."
+    
+    mkdir -p /etc/sing-box
+    
+    # Create minimal config (will be updated by PinPoint when tunnels are added)
+    cat > /etc/sing-box/config.json << 'SBCONFIG'
+{
+  "log": {"level": "info"},
+  "dns": {
+    "servers": [
+      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun1",
+      "address": ["10.0.0.1/30"],
+      "mtu": 9000,
+      "auto_route": false,
+      "sniff": true
+    }
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct-out"},
+    {"type": "dns", "tag": "dns-out"}
+  ],
+  "route": {
+    "rules": [
+      {"protocol": "dns", "outbound": "dns-out"}
+    ],
+    "auto_detect_interface": true
+  }
+}
+SBCONFIG
+
+    info "sing-box config created (add tunnels via PinPoint UI)"
 }
 
 # ============================================
@@ -666,6 +832,25 @@ get_lan_ip() {
         IP="<router-ip>"
     fi
     echo "$IP"
+}
+
+# ============================================
+# Cleanup
+# ============================================
+cleanup_install() {
+    step "Cleaning up installation..."
+    
+    # Kill any lingering pip processes
+    killall pip3 2>/dev/null || true
+    
+    # Clear package cache
+    rm -rf /tmp/opkg-* 2>/dev/null || true
+    
+    # Sync and drop caches to free memory
+    sync
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    
+    info "Cleanup complete"
 }
 
 print_success() {
@@ -772,8 +957,11 @@ main() {
     setup_default_config
     setup_authentication
     create_init_script
+    create_routing_scripts
+    create_singbox_config
     setup_firewall
     start_service
+    cleanup_install
     print_success
 }
 
