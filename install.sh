@@ -459,7 +459,11 @@ install_dependencies() {
     install_package "kmod-tun" "TUN kernel module"
     
     # Firewall and routing
-    install_package "nftables" "nftables firewall"
+    if command -v nft >/dev/null 2>&1; then
+        info "nftables - already installed"
+    else
+        install_package "nftables-json" "nftables firewall" || install_package "nftables" "nftables"
+    fi
     install_package "ip-full" "iproute2 full"
     
     # DNS
