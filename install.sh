@@ -60,6 +60,13 @@ opkg_silent() {
     opkg "$@" 2>&1 | grep -iE "error|failed|cannot|No space" || true
 }
 
+# Download file - uses curl (more common on OpenWRT)
+download() {
+    URL="$1"
+    OUTPUT="$2"
+    curl -fsSL -o "$OUTPUT" "$URL" 2>/dev/null
+}
+
 # ============================================
 # Version comparison
 # ============================================
@@ -366,7 +373,7 @@ install_singbox() {
             TMP_PKG="/tmp/sing-box.ipk"
             
             step "  Downloading from ImmortalWRT ${IMMORTAL_VER}..."
-            if wget -q -O "$TMP_PKG" "$SINGBOX_URL" 2>/dev/null; then
+            if download "$SINGBOX_URL" "$TMP_PKG"; then
                 opkg_silent install "$TMP_PKG"
                 rm -f "$TMP_PKG"
                 if command -v sing-box >/dev/null 2>&1; then
@@ -406,7 +413,7 @@ install_singbox() {
             mkdir -p "$TMP_DIR"
             
             step "Downloading sing-box ${VERSION_NUM} from SagerNet..."
-            if wget -q -O "$TMP_DIR/sing-box.tar.gz" "$BINARY_URL" 2>/dev/null; then
+            if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
                 cd "$TMP_DIR"
                 tar -xzf sing-box.tar.gz 2>/dev/null
                 
@@ -444,7 +451,6 @@ install_dependencies() {
     
     # Network tools
     install_package "curl" "cURL"
-    install_package "wget" "wget"
     install_package "ca-certificates" "CA certificates"
     install_package "ca-bundle" "CA bundle"
     
@@ -582,22 +588,22 @@ download_files() {
     
     # Backend
     step "Downloading backend..."
-    wget -q -O "$PINPOINT_DIR/backend/main.py" "$GITHUB_REPO/backend/main.py" || error "Failed to download main.py"
-    wget -q -O "$PINPOINT_DIR/backend/tunnels.py" "$GITHUB_REPO/backend/tunnels.py" 2>/dev/null || true
+    download "$GITHUB_REPO/backend/main.py" "$PINPOINT_DIR/backend/main.py" || error "Failed to download main.py"
+    download "$GITHUB_REPO/backend/tunnels.py" "$PINPOINT_DIR/backend/tunnels.py" || true
     info "Backend downloaded"
     
     # Frontend
     step "Downloading frontend..."
-    wget -q -O "$PINPOINT_DIR/frontend/index.html" "$GITHUB_REPO/frontend/index.html" || error "Failed to download index.html"
-    wget -q -O "$PINPOINT_DIR/frontend/login.html" "$GITHUB_REPO/frontend/login.html" || error "Failed to download login.html"
-    wget -q -O "$PINPOINT_DIR/frontend/css/style.css" "$GITHUB_REPO/frontend/css/style.css" || error "Failed to download style.css"
-    wget -q -O "$PINPOINT_DIR/frontend/js/app.js" "$GITHUB_REPO/frontend/js/app.js" || error "Failed to download app.js"
-    wget -q -O "$PINPOINT_DIR/frontend/assets/logo.svg" "$GITHUB_REPO/frontend/assets/logo.svg" 2>/dev/null || true
+    download "$GITHUB_REPO/frontend/index.html" "$PINPOINT_DIR/frontend/index.html" || error "Failed to download index.html"
+    download "$GITHUB_REPO/frontend/login.html" "$PINPOINT_DIR/frontend/login.html" || error "Failed to download login.html"
+    download "$GITHUB_REPO/frontend/css/style.css" "$PINPOINT_DIR/frontend/css/style.css" || error "Failed to download style.css"
+    download "$GITHUB_REPO/frontend/js/app.js" "$PINPOINT_DIR/frontend/js/app.js" || error "Failed to download app.js"
+    download "$GITHUB_REPO/frontend/assets/logo.svg" "$PINPOINT_DIR/frontend/assets/logo.svg" || true
     info "Frontend downloaded"
     
     # Scripts
     step "Downloading scripts..."
-    wget -q -O "$PINPOINT_DIR/scripts/update-subscriptions.sh" "$GITHUB_REPO/scripts/update-subscriptions.sh" 2>/dev/null || true
+    download "$GITHUB_REPO/scripts/update-subscriptions.sh" "$PINPOINT_DIR/scripts/update-subscriptions.sh" || true
     chmod +x "$PINPOINT_DIR/scripts/"*.sh 2>/dev/null || true
     info "Scripts downloaded"
     
