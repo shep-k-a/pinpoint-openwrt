@@ -25,7 +25,7 @@ PinPoint is a web-based management interface for routing specific services and d
 
 ## Quick Install
 
-Run this command on your OpenWRT router:
+Run this one-line command on your OpenWRT router:
 
 ```bash
 wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
@@ -36,6 +36,8 @@ Or with curl:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 ```
+
+**Note:** Installation optimized for low-RAM devices (256MB+). Python packages are installed from pre-compiled binaries when possible.
 
 The installer will:
 1. Check system compatibility
