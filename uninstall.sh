@@ -18,6 +18,11 @@ for arg in "$@"; do
     esac
 done
 
+# Auto-confirm if not running interactively (piped from curl)
+if [ ! -t 0 ]; then
+    AUTO_CONFIRM=1
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
