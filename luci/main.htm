@@ -1,0 +1,23 @@
+﻿<%+header%>
+<style>
+.pinpoint-container{text-align:center;padding:40px;max-width:600px;margin:0 auto}
+.pinpoint-logo{width:80px;height:80px;margin:0 auto 20px;background:linear-gradient(135deg,#4a5568 0%,#6b5b7a 100%);border-radius:18px;display:flex;align-items:center;justify-content:center}
+.pinpoint-logo-dot{width:30px;height:30px;background:rgba(255,255,255,0.95);border-radius:50%}
+.pinpoint-title{font-size:28px;font-weight:bold;margin-bottom:10px;color:#4a5568}
+.pinpoint-desc{color:#666;margin-bottom:30px;font-size:16px}
+.pinpoint-btn{display:inline-block;background:linear-gradient(135deg,#4a5568 0%,#6b5b7a 100%);color:white !important;padding:15px 40px;border-radius:8px;text-decoration:none;font-size:18px;font-weight:500}
+.pinpoint-btn:hover{opacity:0.9}
+.pinpoint-info{margin-top:30px;padding:15px 25px;background:#f5f5f5;border-radius:8px;display:inline-block}
+.pinpoint-info p{margin:5px 0;color:#555}
+</style>
+<div class="pinpoint-container">
+<div class="pinpoint-logo"><div class="pinpoint-logo-dot"></div></div>
+<div class="pinpoint-title">PinPoint</div>
+<div class="pinpoint-desc">Selective VPN Routing for OpenWRT</div>
+<br>
+<a href="/pinpoint/" target="_blank" class="pinpoint-btn" onclick="this.href='http://'+location.hostname+':8080/';return true;">Open PinPoint Dashboard</a>
+<div class="pinpoint-info">
+<p><strong>Port:</strong> 8080</p>
+</div>
+</div>
+<%+footer%>

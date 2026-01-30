@@ -1,0 +1,35 @@
+#!/bin/sh /etc/rc.common
+# Pinpoint - Selective routing service for OpenWrt
+
+START=99
+STOP=10
+USE_PROCD=1
+
+PINPOINT_DIR="/opt/pinpoint"
+
+start_service() {
+    logger -t pinpoint "Starting pinpoint service..."
+    
+    # Initialize nftables and policy routing
+    /opt/pinpoint/scripts/pinpoint-init.sh start
+    
+    # Apply current rules
+    /opt/pinpoint/scripts/pinpoint-apply.sh reload
+    
+    logger -t pinpoint "Pinpoint service started"
+}
+
+stop_service() {
+    logger -t pinpoint "Stopping pinpoint service..."
+    /opt/pinpoint/scripts/pinpoint-init.sh stop
+    logger -t pinpoint "Pinpoint service stopped"
+}
+
+reload_service() {
+    logger -t pinpoint "Reloading pinpoint rules..."
+    /opt/pinpoint/scripts/pinpoint-apply.sh reload
+}
+
+status_service() {
+    /opt/pinpoint/scripts/pinpoint-init.sh status
+}

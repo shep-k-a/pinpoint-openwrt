@@ -1,0 +1,21 @@
+{
+  "devices": [
+    {
+      "id": "example",
+      "name": "Пример устройства",
+      "ip": "192.168.1.100",
+      "mac": "",
+      "mode": "default",
+      "services": [],
+      "custom_domains": [],
+      "custom_ips": [],
+      "enabled": false
+    }
+  ],
+  "modes": {
+    "default": "По умолчанию (выбранные сервисы)",
+    "vpn_all": "Весь трафик через VPN",
+    "direct_all": "Весь трафик напрямую",
+    "custom": "Индивидуальные сервисы"
+  }
+}

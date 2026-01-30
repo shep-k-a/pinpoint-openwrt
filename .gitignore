@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local development
+deploy.ps1
+test_*.py
+
+# Local data (not included in repo)
+data/stats.db
+data/custom_services.json
+data/routing_rules.json
+
+# Logs
+*.log
+logs/
+
+# Temporary
+*.tmp
+*.bak

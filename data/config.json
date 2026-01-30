@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "settings": {
+    "tun_interface": "tun1",
+    "fwmark": "0x100",
+    "route_table": 100,
+    "dns_timeout": 3600,
+    "auto_update": true,
+    "update_interval": 86400
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}

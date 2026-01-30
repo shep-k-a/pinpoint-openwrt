@@ -1,0 +1,14 @@
+{
+    "admin/services/pinpoint": {
+        "title": "PinPoint",
+        "order": 90,
+        "action": {
+            "type": "template",
+            "path": "pinpoint/main"
+        },
+        "depends": {
+            "acl": ["luci-app-pinpoint"],
+            "uci": {}
+        }
+    }
+}

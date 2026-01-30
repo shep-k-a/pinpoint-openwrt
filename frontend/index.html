@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PinPoint - Точечная маршрутизация</title>
+    <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css?v=3">
+    <style>
+        /* Hide content until auth is verified */
+        body.auth-pending { visibility: hidden; }
+        body.auth-pending * { visibility: hidden; }
+    </style>
+</head>
+<body class="auth-pending">
+    <!-- Sidebar Menu -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <img src="/assets/logo.svg" alt="PinPoint" class="logo-img">
+                <div class="logo-text">
+                    <span class="logo-title">PinPoint</span>
+                    <span class="logo-subtitle">OpenWRT</span>
+                </div>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="#dashboard" class="nav-item active" data-tab="dashboard">
+                <span class="nav-icon">◉</span>
+                <span class="nav-label">Главная</span>
+            </a>
+            <a href="#services" class="nav-item" data-tab="services">
+                <span class="nav-icon">◎</span>
+                <span class="nav-label">Сервисы</span>
+            </a>
+            <a href="#devices" class="nav-item" data-tab="devices">
+                <span class="nav-icon">▣</span>
+                <span class="nav-label">Устройства</span>
+            </a>
+            <a href="#domains" class="nav-item" data-tab="domains">
+                <span class="nav-icon">≡</span>
+                <span class="nav-label">Правила</span>
+            </a>
+            <a href="#tunnels" class="nav-item" data-tab="tunnels">
+                <span class="nav-icon">◈</span>
+                <span class="nav-label">Туннели</span>
+            </a>
+            <a href="#settings" class="nav-item" data-tab="settings">
+                <span class="nav-icon">○</span>
+                <span class="nav-label">Настройки</span>
+            </a>
+            <a href="#help" class="nav-item" data-tab="help">
+                <span class="nav-icon">?</span>
+                <span class="nav-label">Справка</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <div class="sidebar-user" id="sidebar-user">
+                <span class="user-icon">◯</span>
+                <span class="user-name" id="current-user-name">admin</span>
+            </div>
+            <div class="sidebar-footer-buttons">
+                <button class="theme-toggle-sidebar" id="theme-toggle-sidebar" onclick="toggleThemeQuick()" title="Переключить тему">
+                    <span id="theme-icon-sidebar">◐</span>
+                </button>
+                <button class="logout-btn" onclick="logout()" title="Выйти">
+                    <span>⏻</span>
+                </button>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Bar (mobile) -->
+        <div class="top-bar">
+            <button class="burger-menu" id="burger-menu" onclick="toggleSidebar()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <h1 class="top-bar-title">PinPoint</h1>
+            <button class="theme-toggle-mobile" onclick="toggleThemeQuick()" title="Переключить тему">
+                🌙
+            </button>
+        </div>
+        
+        <div class="container">
+
+        <!-- Dashboard Tab -->
+        <section id="dashboard" class="tab-content active">
+            <div class="section-header">
+                <h2>Главная</h2>
+                <div class="auto-refresh-indicator">
+                    <span class="pulse-dot"></span>
+                    <span class="refresh-text">Авто-обновление</span>
+                    <span class="last-update" id="dashboard-last-update"></span>
+                </div>
+            </div>
+            
+            <div class="dashboard-layout">
+                <!-- Row 1: Status + Health -->
+                <div class="dashboard-row">
+                    <div class="status-card" id="status-card">
+                        <div class="status-main">
+                            <div class="status-indicator" id="status-indicator"></div>
+                            <div class="status-text">
+                                <h3>VPN Туннель</h3>
+                                <p id="status-message">Загрузка...</p>
+                            </div>
+                        </div>
+                        <div class="status-stats">
+                            <div class="status-stat">
+                                <span class="status-stat-icon">▤</span>
+                                <div class="status-stat-info">
+                                    <span class="status-stat-value" id="stat-packets">-</span>
+                                    <span class="status-stat-label">пакетов</span>
+                                </div>
+                            </div>
+                            <div class="status-stat">
+                                <span class="status-stat-icon">↕</span>
+                                <div class="status-stat-info">
+                                    <span class="status-stat-value" id="stat-bytes">-</span>
+                                    <span class="status-stat-label">данных</span>
+                                </div>
+                            </div>
+                            <div class="status-stat">
+                                <span class="status-stat-icon">⊕</span>
+                                <div class="status-stat-info">
+                                    <span class="status-stat-value" id="stat-networks">-</span>
+                                    <span class="status-stat-label">сетей</span>
+                                </div>
+                            </div>
+                            <div class="status-stat">
+                                <span class="status-stat-icon">#</span>
+                                <div class="status-stat-info">
+                                    <span class="status-stat-value" id="stat-ips">-</span>
+                                    <span class="status-stat-label">IP адресов</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card health-card-compact">
+                        <div class="health-grid-compact" id="health-grid">
+                            <!-- Health items -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 2: System Resources -->
+                <div class="dashboard-row resources-row">
+                    <!-- Router Load -->
+                    <div class="card resource-card">
+                        <div class="resource-header">
+                            <span class="resource-icon">▢</span>
+                            <span class="resource-title">Роутер</span>
+                            <span class="resource-uptime" id="uptime-value">—</span>
+                        </div>
+                        <div class="resource-bars">
+                            <div class="resource-item">
+                                <span class="resource-label">CPU</span>
+                                <div class="resource-bar-wrap">
+                                    <div class="resource-bar">
+                                        <div class="resource-bar-fill" id="cpu-bar" style="width: 0%"></div>
+                                    </div>
+                                    <span class="resource-value" id="cpu-value">—</span>
+                                </div>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">RAM</span>
+                                <div class="resource-bar-wrap">
+                                    <div class="resource-bar">
+                                        <div class="resource-bar-fill ram" id="ram-bar" style="width: 0%"></div>
+                                    </div>
+                                    <span class="resource-value" id="ram-value">—</span>
+                                </div>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">Диск</span>
+                                <div class="resource-bar-wrap">
+                                    <div class="resource-bar">
+                                        <div class="resource-bar-fill disk" id="disk-bar" style="width: 0%"></div>
+                                    </div>
+                                    <span class="resource-value" id="disk-value">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pinpoint Service Load -->
+                    <div class="card resource-card">
+                        <div class="resource-header">
+                            <span class="resource-icon">◆</span>
+                            <span class="resource-title">PinPoint</span>
+                            <span class="resource-badge" id="pinpoint-status">активен</span>
+                        </div>
+                        <div class="resource-bars">
+                            <div class="resource-item">
+                                <span class="resource-label">CPU</span>
+                                <div class="resource-bar-wrap">
+                                    <div class="resource-bar">
+                                        <div class="resource-bar-fill pinpoint" id="pinpoint-cpu-bar" style="width: 0%"></div>
+                                    </div>
+                                    <span class="resource-value" id="pinpoint-cpu-value">—</span>
+                                </div>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">RAM</span>
+                                <div class="resource-bar-wrap">
+                                    <div class="resource-bar">
+                                        <div class="resource-bar-fill pinpoint" id="pinpoint-ram-bar" style="width: 0%"></div>
+                                    </div>
+                                    <span class="resource-value" id="pinpoint-ram-value">—</span>
+                                </div>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">Соединений</span>
+                                <div class="resource-bar-wrap">
+                                    <span class="resource-value-large" id="pinpoint-connections">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 3: Charts -->
+                <div class="dashboard-row charts-row">
+                    <!-- Traffic Chart -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3>↕ Трафик через туннель</h3>
+                            <div class="chart-period-selector">
+                                <button class="period-btn active" data-period="24h" onclick="changeTrafficPeriod('24h')">24ч</button>
+                                <button class="period-btn" data-period="7d" onclick="changeTrafficPeriod('7d')">7д</button>
+                                <button class="period-btn" data-period="30d" onclick="changeTrafficPeriod('30d')">30д</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="traffic-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- CPU/RAM Chart -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3 id="system-chart-title">▢ Роутер</h3>
+                            <div class="chart-controls">
+                                <div class="chart-mode-toggle">
+                                    <button class="chart-mode-btn active" data-mode="router" onclick="toggleSystemChartMode('router')">Роутер</button>
+                                    <button class="chart-mode-btn" data-mode="pinpoint" onclick="toggleSystemChartMode('pinpoint')">PinPoint</button>
+                                </div>
+                                <div class="chart-period-selector">
+                                    <button class="period-btn active" data-period="24h" onclick="changeSystemPeriod('24h')">24ч</button>
+                                    <button class="period-btn" data-period="7d" onclick="changeSystemPeriod('7d')">7д</button>
+                                    <button class="period-btn" data-period="30d" onclick="changeSystemPeriod('30d')">30д</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="system-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 4: Devices -->
+                <div class="dashboard-row">
+                    <div class="card devices-card" style="grid-column: span 2;">
+                        <h3>▣ Топ устройств</h3>
+                        <div class="top-devices-list" id="top-devices-list">
+                            <div class="empty-state">Загрузка...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 4: Test + Connections + Update -->
+                <div class="dashboard-row triple-row">
+                    <div class="card">
+                        <h3>🧪 Проверка маршрута</h3>
+                        <div class="quick-test-form">
+                            <input type="text" id="test-domain" placeholder="youtube.com" />
+                            <button class="btn btn-sm btn-primary" onclick="testDomain()">Тест</button>
+                        </div>
+                        <div class="test-result-compact" id="test-result"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>🔗 Подключения</h3>
+                        <div class="connections-compact" id="connections-list">
+                            <div class="empty-state">Загрузка...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card update-card">
+                        <h3>↻ Списки маршрутизации</h3>
+                        <p class="card-desc">IP-адреса и домены сервисов для направления через VPN</p>
+                        <div class="update-stats-compact">
+                            <div class="update-stat-item">
+                                <span class="update-stat-val" id="stat-services">-</span>
+                                <span class="update-stat-lbl">сервисов</span>
+                            </div>
+                            <div class="update-stat-item">
+                                <span class="update-stat-val" id="stat-cidrs">-</span>
+                                <span class="update-stat-lbl">IP</span>
+                            </div>
+                            <div class="update-stat-item">
+                                <span class="update-stat-val" id="stat-domains">-</span>
+                                <span class="update-stat-lbl">доменов</span>
+                            </div>
+                        </div>
+                        <div class="update-footer">
+                            <span id="last-update-time">—</span>
+                            <button class="btn btn-xs btn-primary" onclick="updateAllLists()">Обновить списки</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Tab -->
+        <section id="services" class="tab-content">
+            <h2>Сервисы</h2>
+            <p class="section-desc">Включите сервисы, трафик которых нужно направлять через туннель</p>
+            
+            <div class="services-toolbar">
+                <div class="search-box">
+                    <input type="text" id="service-search" placeholder="Поиск сервисов..." oninput="filterServices()">
+                </div>
+                <div class="category-filter">
+                    <select id="category-filter" onchange="filterServices()">
+                        <option value="">Все категории</option>
+                    </select>
+                </div>
+                <div class="enabled-filter">
+                    <label>
+                        <input type="checkbox" id="enabled-only" onchange="filterServices()">
+                        Только активные
+                    </label>
+                </div>
+            </div>
+            
+            <div class="services-grid" id="services-grid">
+                <!-- Services will be loaded here -->
+            </div>
+            
+            <div class="pagination" id="services-pagination">
+                <!-- Pagination will be rendered here -->
+            </div>
+        </section>
+
+        <!-- Service Details Modal -->
+        <div class="modal" id="service-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-service-name">Настройки сервиса</h3>
+                    <button class="modal-close" onclick="closeServiceModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-section">
+                        <h4>Источники IP</h4>
+                        <div id="modal-sources" class="sources-list"></div>
+                        <div class="add-form">
+                            <input type="text" id="new-source-url" placeholder="https://..." />
+                            <button class="btn btn-sm btn-primary" onclick="addSource()">Добавить</button>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-section">
+                        <h4>Домены</h4>
+                        <div id="modal-domains" class="tags-list"></div>
+                        <div class="add-form">
+                            <input type="text" id="new-service-domain" placeholder="example.com" />
+                            <button class="btn btn-sm btn-primary" onclick="addServiceDomain()">Добавить</button>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-section">
+                        <h4>IP адреса / CIDR</h4>
+                        <div id="modal-ips" class="tags-list"></div>
+                        <div class="add-form">
+                            <input type="text" id="new-service-ip" placeholder="1.2.3.4/24" />
+                            <button class="btn btn-sm btn-primary" onclick="addServiceIp()">Добавить</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeServiceModal()">Закрыть</button>
+                    <button class="btn btn-primary" onclick="refreshCurrentService()">Обновить из источников</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Devices Tab -->
+        <section id="devices" class="tab-content">
+            <h2>Устройства</h2>
+            <p class="section-desc">По умолчанию все устройства используют глобальные настройки сервисов. Здесь можно задать индивидуальные правила.</p>
+            
+            <div class="devices-toolbar">
+                <div class="devices-search">
+                    <input type="text" id="device-search" placeholder="Поиск..." oninput="filterDevicesList()">
+                </div>
+                <div class="devices-filter">
+                    <label><input type="checkbox" id="show-custom-only" onchange="filterDevicesList()"> Только с особыми правилами</label>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="refreshAllDevices()">Обновить</button>
+            </div>
+            
+            <div class="devices-grid" id="devices-grid">
+                <!-- Devices will be loaded here -->
+            </div>
+        </section>
+
+        <!-- Device Modal -->
+        <div class="modal" id="device-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-device-name">Настройки устройства</h3>
+                    <button class="modal-close" onclick="closeDeviceModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-section">
+                        <div class="form-group">
+                            <label>Название</label>
+                            <input type="text" id="edit-device-name" />
+                        </div>
+                        <div class="form-group">
+                            <label>IP адрес</label>
+                            <input type="text" id="edit-device-ip" readonly class="readonly" />
+                        </div>
+                    </div>
+                    
+                    <div class="modal-section">
+                        <h4>Правило маршрутизации</h4>
+                        <div class="mode-options">
+                            <label class="mode-option">
+                                <input type="radio" name="device-mode" value="default" onchange="toggleDeviceServices()">
+                                <div class="mode-option-content">
+                                    <span class="mode-icon">◉</span>
+                                    <div>
+                                        <div class="mode-title">Глобальные настройки</div>
+                                        <div class="mode-desc">Использует общие правила из вкладки "Сервисы"</div>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="device-mode" value="vpn_all" onchange="toggleDeviceServices()">
+                                <div class="mode-option-content">
+                                    <span class="mode-icon">◎</span>
+                                    <div>
+                                        <div class="mode-title">Весь трафик через VPN</div>
+                                        <div class="mode-desc">Абсолютно весь трафик идёт через туннель</div>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="device-mode" value="direct_all" onchange="toggleDeviceServices()">
+                                <div class="mode-option-content">
+                                    <span class="mode-icon">🚀</span>
+                                    <div>
+                                        <div class="mode-title">Весь трафик напрямую</div>
+                                        <div class="mode-desc">VPN полностью игнорируется</div>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="device-mode" value="custom" onchange="toggleDeviceServices()">
+                                <div class="mode-option-content">
+                                    <span class="mode-icon">○</span>
+                                    <div>
+                                        <div class="mode-title">Свой набор сервисов</div>
+                                        <div class="mode-desc">Выбрать конкретные сервисы для VPN</div>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-section" id="device-services-section" style="display: none;">
+                        <h4>Сервисы через VPN</h4>
+                        <div class="device-services-toolbar">
+                            <input type="text" id="device-service-search" placeholder="Поиск сервисов..." oninput="filterDeviceServicesGrid()">
+                            <select id="device-service-category" onchange="filterDeviceServicesGrid()">
+                                <option value="">Все категории</option>
+                            </select>
+                        </div>
+                        <div id="device-services-grid" class="device-services-grid">
+                            <!-- Services checkboxes will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="modal-section" id="device-custom-section" style="display: none;">
+                        <h4>Дополнительные правила для устройства</h4>
+                        <div class="device-custom-rules">
+                            <div class="device-custom-block">
+                                <label>Домены</label>
+                                <div class="device-custom-tags" id="device-custom-domains"></div>
+                                <div class="add-form-inline">
+                                    <input type="text" id="new-device-domain" placeholder="example.com">
+                                    <button class="btn btn-sm btn-primary" onclick="addDeviceCustomDomain()">+</button>
+                                </div>
+                            </div>
+                            <div class="device-custom-block">
+                                <label>IP / CIDR</label>
+                                <div class="device-custom-tags" id="device-custom-ips"></div>
+                                <div class="add-form-inline">
+                                    <input type="text" id="new-device-ip" placeholder="1.2.3.4/24">
+                                    <button class="btn btn-sm btn-primary" onclick="addDeviceCustomIp()">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" onclick="resetDeviceToDefault()">Сбросить</button>
+                    <button class="btn btn-secondary" onclick="closeDeviceModal()">Отмена</button>
+                    <button class="btn btn-primary" onclick="saveDevice()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Services Tab -->
+        <section id="domains" class="tab-content">
+            <div class="section-header-row">
+                <div>
+                    <h2>Мои сервисы</h2>
+                    <p class="section-desc">Создавайте свои сервисы с доменами и IP для маршрутизации через туннель</p>
+                </div>
+                <button class="btn btn-primary" onclick="openCreateCustomServiceModal()">
+                    ➕ Создать сервис
+                </button>
+            </div>
+            
+            <div class="custom-services-grid" id="custom-services-grid">
+                <!-- Custom services will be loaded here -->
+                <div class="empty-state">Загрузка...</div>
+            </div>
+        </section>
+        
+        <!-- Custom Service Modal -->
+        <div class="modal" id="custom-service-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="custom-service-modal-title">Новый сервис</h3>
+                    <button class="modal-close" onclick="closeCustomServiceModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Название</label>
+                        <input type="text" id="custom-service-name" placeholder="Мой сервис">
+                    </div>
+                    <div class="form-group">
+                        <label>Описание</label>
+                        <input type="text" id="custom-service-description" placeholder="Описание (необязательно)">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Домены</label>
+                        <div class="tags-container" id="custom-service-domains"></div>
+                        <div class="add-form-inline">
+                            <input type="text" id="new-custom-service-domain" placeholder="example.com" onkeydown="if(event.key==='Enter'){addCustomServiceDomain(); event.preventDefault();}">
+                            <button class="btn btn-sm btn-primary" onclick="addCustomServiceDomain()">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>IP / CIDR</label>
+                        <div class="tags-container" id="custom-service-ips"></div>
+                        <div class="add-form-inline">
+                            <input type="text" id="new-custom-service-ip" placeholder="1.2.3.4 или 10.0.0.0/24" onkeydown="if(event.key==='Enter'){addCustomServiceIp(); event.preventDefault();}">
+                            <button class="btn btn-sm btn-primary" onclick="addCustomServiceIp()">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeCustomServiceModal()">Отмена</button>
+                    <button class="btn btn-danger" id="delete-custom-service-btn" style="display: none;" onclick="deleteCurrentCustomService()">Удалить</button>
+                    <button class="btn btn-primary" onclick="saveCustomService()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Tunnels Tab -->
+        <section id="tunnels" class="tab-content">
+            <!-- Header with status -->
+            <div class="tunnels-header">
+                <div class="tunnels-header-left">
+                    <h2>VPN Серверы</h2>
+                    <div class="vpn-status-badge" id="vpn-status-badge">
+                        <span class="status-dot"></span>
+                        <span id="vpn-status-text">Проверка...</span>
+                    </div>
+                </div>
+                <div class="tunnels-header-actions">
+                    <button class="btn btn-sm" onclick="testAllTunnels()" title="Проверить все серверы">⚡ Тест</button>
+                    <button class="btn btn-sm" onclick="toggleImportPanel()" id="btn-toggle-import">+ Добавить</button>
+                </div>
+            </div>
+            
+            <!-- Collapsible Import Panel -->
+            <div class="import-panel" id="import-panel" style="display: none;">
+                <div class="import-panel-tabs">
+                    <button class="import-panel-tab active" onclick="switchImportTab('link')" data-tab="link">Ссылка</button>
+                    <button class="import-panel-tab" onclick="switchImportTab('subscription')" data-tab="subscription">Подписка</button>
+                    <button class="import-panel-close" onclick="toggleImportPanel()">×</button>
+                </div>
+                <div id="import-link-form" class="import-panel-content">
+                    <textarea id="import-link-input" placeholder="vless://, vmess://, ss://, trojan://, hysteria2://&#10;Можно вставить несколько ссылок" rows="3"></textarea>
+                    <button class="btn btn-primary btn-block" onclick="importTunnelLinks()">Импортировать</button>
+                </div>
+                <div id="import-subscription-form" class="import-panel-content" style="display: none;">
+                    <input type="text" id="sub-name" placeholder="Название (например: Мой провайдер)">
+                    <input type="text" id="sub-url" placeholder="URL подписки">
+                    <div class="sub-options-row">
+                        <select id="sub-format">
+                            <option value="auto">Формат: Авто</option>
+                            <option value="base64">Base64</option>
+                            <option value="clash">Clash YAML</option>
+                            <option value="singbox">Sing-box JSON</option>
+                        </select>
+                        <select id="sub-interval">
+                            <option value="6">Обновлять: 6ч</option>
+                            <option value="12">12ч</option>
+                            <option value="24" selected>24ч</option>
+                            <option value="48">48ч</option>
+                            <option value="168">7 дней</option>
+                        </select>
+                    </div>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="sub-auto-update" checked>
+                        <span>Автоматически обновлять серверы</span>
+                    </label>
+                    <button class="btn btn-primary btn-block" onclick="addSubscription()">Добавить подписку</button>
+                </div>
+            </div>
+            
+            <!-- Active Server Selection -->
+            <div class="active-server-bar" id="active-server-bar">
+                <div class="active-server-info">
+                    <span class="active-server-label">Активный сервер:</span>
+                    <select id="active-outbound-select">
+                        <option value="">Выберите сервер...</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="applyTunnelConfig()">Применить</button>
+            </div>
+            
+            <!-- Subscriptions Section -->
+            <div class="subs-section" id="subscriptions-section" style="display: none;">
+                <div class="subs-header">
+                    <span class="subs-title">Подписки</span>
+                </div>
+                <div class="subs-list" id="subscriptions-list"></div>
+            </div>
+            
+            <!-- Groups Section -->
+            <div class="groups-section" id="tunnel-groups-section" style="display: none;">
+                <div class="groups-header">
+                    <span class="groups-title">Группы</span>
+                    <button class="btn btn-sm" onclick="openCreateGroupModal()">+ Группа</button>
+                </div>
+                <div class="groups-list" id="tunnel-groups-list"></div>
+            </div>
+            
+            <!-- Servers List -->
+            <div class="servers-section">
+                <div class="servers-list-header">
+                    <span class="servers-title">Серверы <span class="servers-count" id="servers-count">0</span></span>
+                    <button class="btn btn-sm" onclick="openCreateTunnelModal()">+ Вручную</button>
+                </div>
+                <div class="servers-list" id="tunnels-list">
+                    <!-- Servers will be loaded here -->
+                </div>
+            </div>
+            
+            <!-- Service Routing Section -->
+            <div class="card service-routing-card">
+                <div class="service-routing-header">
+                    <div class="service-routing-title">
+                        <h3>⇄ Маршрутизация сервисов</h3>
+                        <span class="service-routing-desc">Выберите через какой сервер идёт каждый сервис</span>
+                    </div>
+                    <button class="btn btn-sm" onclick="resetAllRoutes()" title="Сбросить все маршруты">↺ Сбросить</button>
+                </div>
+                
+                <!-- Warning if only 1 tunnel -->
+                <div class="routing-warning" id="routing-warning" style="display: none;">
+                    <span class="warning-icon">⚠</span>
+                    <span>Для маршрутизации нужно минимум 2 сервера. Сейчас весь трафик идёт через один сервер.</span>
+                </div>
+                
+                <!-- Default route -->
+                <div class="default-route-row">
+                    <div class="default-route-label">
+                        <span class="route-icon">🌐</span>
+                        <div>
+                            <strong>Остальной трафик</strong>
+                            <span class="route-hint">Сервисы без правил</span>
+                        </div>
+                    </div>
+                    <select id="routing-default-outbound" onchange="setRoutingDefault()">
+                        <option value="">Загрузка...</option>
+                    </select>
+                </div>
+                
+                <!-- Services list with routing -->
+                <div class="service-routes-list" id="service-routes-list">
+                    <div class="loading-state">Загрузка сервисов...</div>
+                </div>
+                
+                <!-- Apply button -->
+                <div class="routing-actions">
+                    <button class="btn btn-primary" onclick="applyServiceRoutes()">Применить маршруты</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Tunnel Modal -->
+        <div class="modal" id="tunnel-modal">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="tunnel-modal-title">Добавить туннель</h3>
+                    <button class="modal-close" onclick="closeTunnelModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Название</label>
+                            <input type="text" id="tunnel-name" placeholder="Мой сервер">
+                        </div>
+                        <div class="form-group">
+                            <label>Протокол</label>
+                            <select id="tunnel-type" onchange="updateTunnelForm()">
+                                <option value="vless">VLESS</option>
+                                <option value="vmess">VMess</option>
+                                <option value="shadowsocks">Shadowsocks</option>
+                                <option value="trojan">Trojan</option>
+                                <option value="hysteria2">Hysteria2</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group flex-2">
+                            <label>Сервер</label>
+                            <input type="text" id="tunnel-server" placeholder="example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Порт</label>
+                            <input type="number" id="tunnel-port" value="443">
+                        </div>
+                    </div>
+                    
+                    <!-- Protocol-specific settings -->
+                    <div id="tunnel-vless-settings" class="protocol-settings">
+                        <div class="form-group">
+                            <label>UUID</label>
+                            <input type="text" id="tunnel-uuid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Flow</label>
+                                <select id="tunnel-flow">
+                                    <option value="">Нет</option>
+                                    <option value="xtls-rprx-vision">xtls-rprx-vision</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Безопасность</label>
+                                <select id="tunnel-security" onchange="updateTlsForm()">
+                                    <option value="none">Нет</option>
+                                    <option value="tls">TLS</option>
+                                    <option value="reality">Reality</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tunnel-vmess-settings" class="protocol-settings" style="display: none;">
+                        <div class="form-group">
+                            <label>UUID</label>
+                            <input type="text" id="tunnel-vmess-uuid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Alter ID</label>
+                                <input type="number" id="tunnel-alterid" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Шифрование</label>
+                                <select id="tunnel-vmess-security">
+                                    <option value="auto">auto</option>
+                                    <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="chacha20-poly1305">chacha20-poly1305</option>
+                                    <option value="none">none</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tunnel-ss-settings" class="protocol-settings" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Метод</label>
+                                <select id="tunnel-ss-method">
+                                    <option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm</option>
+                                    <option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
+                                    <option value="2022-blake3-chacha20-poly1305">2022-blake3-chacha20-poly1305</option>
+                                    <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="aes-256-gcm">aes-256-gcm</option>
+                                    <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Пароль</label>
+                                <input type="text" id="tunnel-ss-password" placeholder="password">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tunnel-trojan-settings" class="protocol-settings" style="display: none;">
+                        <div class="form-group">
+                            <label>Пароль</label>
+                            <input type="text" id="tunnel-trojan-password" placeholder="password">
+                        </div>
+                    </div>
+                    
+                    <div id="tunnel-hysteria2-settings" class="protocol-settings" style="display: none;">
+                        <div class="form-group">
+                            <label>Пароль</label>
+                            <input type="text" id="tunnel-hy2-password" placeholder="password">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Obfs тип</label>
+                                <input type="text" id="tunnel-hy2-obfs" placeholder="salamander">
+                            </div>
+                            <div class="form-group">
+                                <label>Obfs пароль</label>
+                                <input type="text" id="tunnel-hy2-obfs-password" placeholder="">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- TLS Settings -->
+                    <div id="tls-settings" class="tls-section" style="display: none;">
+                        <h4>TLS настройки</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>SNI</label>
+                                <input type="text" id="tunnel-sni" placeholder="google.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Fingerprint</label>
+                                <select id="tunnel-fingerprint">
+                                    <option value="chrome">chrome</option>
+                                    <option value="firefox">firefox</option>
+                                    <option value="safari">safari</option>
+                                    <option value="edge">edge</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="reality-settings" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Public Key</label>
+                                    <input type="text" id="tunnel-pbk" placeholder="Public key">
+                                </div>
+                                <div class="form-group">
+                                    <label>Short ID</label>
+                                    <input type="text" id="tunnel-sid" placeholder="">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Transport Settings -->
+                    <div class="transport-section">
+                        <h4>Транспорт</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Тип</label>
+                                <select id="tunnel-transport" onchange="updateTransportForm()">
+                                    <option value="tcp">TCP</option>
+                                    <option value="ws">WebSocket</option>
+                                    <option value="grpc">gRPC</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="ws-settings" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Path</label>
+                                    <input type="text" id="tunnel-ws-path" placeholder="/">
+                                </div>
+                                <div class="form-group">
+                                    <label>Host</label>
+                                    <input type="text" id="tunnel-ws-host" placeholder="">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="grpc-settings" style="display: none;">
+                            <div class="form-group">
+                                <label>Service Name</label>
+                                <input type="text" id="tunnel-grpc-service" placeholder="">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeTunnelModal()">Отмена</button>
+                    <button class="btn btn-danger" id="delete-tunnel-btn" style="display: none;" onclick="deleteCurrentTunnel()">Удалить</button>
+                    <button class="btn btn-primary" onclick="saveTunnel()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Group Modal -->
+        <div class="modal" id="group-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="group-modal-title">Создать группу</h3>
+                    <button class="modal-close" onclick="closeGroupModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Название</label>
+                        <input type="text" id="group-name" placeholder="Авто-выбор">
+                    </div>
+                    <div class="form-group">
+                        <label>Тип</label>
+                        <select id="group-type">
+                            <option value="urltest">URL Test (выбор по задержке)</option>
+                            <option value="fallback">Fallback (резервирование)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Интервал проверки</label>
+                            <input type="text" id="group-interval" value="5m" placeholder="5m">
+                        </div>
+                        <div class="form-group">
+                            <label>Допуск (мс)</label>
+                            <input type="number" id="group-tolerance" value="50">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Серверы в группе</label>
+                        <div class="group-tunnels-selector" id="group-tunnels-selector">
+                            <!-- Checkboxes will be generated -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeGroupModal()">Отмена</button>
+                    <button class="btn btn-danger" id="delete-group-btn" style="display: none;" onclick="deleteCurrentGroup()">Удалить</button>
+                    <button class="btn btn-primary" onclick="saveGroup()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Change Password Modal -->
+        <div class="modal" id="change-password-modal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3>Сменить пароль</h3>
+                    <button class="modal-close" onclick="closeChangePasswordModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Текущий пароль</label>
+                        <input type="password" id="current-password" autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label>Новый пароль</label>
+                        <input type="password" id="new-password" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>Подтвердите пароль</label>
+                        <input type="password" id="confirm-password" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeChangePasswordModal()">Отмена</button>
+                    <button class="btn btn-primary" onclick="changePassword()">Сменить</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <section id="settings" class="tab-content">
+            <h2>Настройки</h2>
+            
+            <div class="settings-layout">
+                <!-- Left column -->
+                <div class="settings-column">
+                    <!-- Auto Update -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">↻</span>
+                            <h3>Автообновление</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="setting-row">
+                                <span class="setting-label">Время обновления списков</span>
+                                <div class="setting-control">
+                                    <input type="text" id="settings-auto-update-time" value="05:00" class="input-time" maxlength="5">
+                                    <button class="btn btn-sm btn-primary" onclick="saveAutoUpdateTimeSetting()">Сохранить</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Security / Auth -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">🔒</span>
+                            <h3>Безопасность</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="setting-row">
+                                <span class="setting-label">Авторизация</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="auth-enabled" onchange="toggleAuthEnabled()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Пользователь</span>
+                                <span class="setting-value" id="auth-username">admin</span>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Сессия</span>
+                                <div class="setting-control">
+                                    <select id="auth-session-hours" onchange="updateSessionHours()">
+                                        <option value="1">1 час</option>
+                                        <option value="6">6 часов</option>
+                                        <option value="12">12 часов</option>
+                                        <option value="24" selected>24 часа</option>
+                                        <option value="72">3 дня</option>
+                                        <option value="168">7 дней</option>
+                                        <option value="720">30 дней</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-sm btn-secondary" onclick="openChangePasswordModal()">Сменить пароль</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Ad Blocking -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">◇</span>
+                            <h3>Блокировка рекламы</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="setting-row">
+                                <span class="setting-label">Статус</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="adblock-enabled" onchange="toggleAdblock()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Заблокировано</span>
+                                    <span class="stat-value" id="adblock-count">—</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Обновлено</span>
+                                    <span class="stat-value" id="adblock-update">—</span>
+                                </div>
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-sm btn-secondary" onclick="testRandomAdblock()">Тест</button>
+                                <button class="btn btn-sm btn-secondary" onclick="updateAdblock()">Обновить</button>
+                            </div>
+                            <div id="adblock-test-result" class="test-result"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Split DNS -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">⊕</span>
+                            <h3>Split DNS</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <p class="setting-desc">DNS запросы для доменов на другие серверы</p>
+                            <div class="split-dns-list" id="split-dns-list"></div>
+                            <div class="add-form-row">
+                                <input type="text" id="split-dns-domain" placeholder="domain.com">
+                                <input type="text" id="split-dns-server" placeholder="8.8.8.8">
+                                <button class="btn btn-sm btn-primary" onclick="addSplitDns()">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right column -->
+                <div class="settings-column">
+                    <!-- Telegram Bot -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">▷</span>
+                            <h3>Telegram</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="form-group">
+                                <label>Bot Token</label>
+                                <input type="password" id="telegram-token" placeholder="123456:ABC-DEF...">
+                            </div>
+                            <div class="form-group">
+                                <label>Chat ID</label>
+                                <input type="text" id="telegram-chat-id" placeholder="123456789">
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Уведомления</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="telegram-enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-actions">
+                                <button class="btn btn-sm btn-secondary" onclick="testTelegram()">Тест</button>
+                                <button class="btn btn-sm btn-primary" onclick="saveTelegram()">Сохранить</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Import/Export -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">⇄</span>
+                            <h3>Резервная копия</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <p class="setting-desc">Сохраните или восстановите конфигурацию</p>
+                            <div class="setting-actions vertical">
+                                <button class="btn btn-secondary" onclick="exportConfig()">📤 Экспорт</button>
+                                <label class="btn btn-secondary">
+                                    📥 Импорт
+                                    <input type="file" id="import-file" accept=".json" onchange="importConfig(event)" hidden>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dependencies - full width -->
+            <div class="settings-card dependencies-card">
+                <div class="settings-card-header">
+                    <span class="settings-icon">⬡</span>
+                    <h3>Зависимости</h3>
+                    <div class="dep-header-actions">
+                        <span class="dep-status-badge" id="dep-status-badge">Проверка...</span>
+                        <button class="btn btn-sm btn-secondary" onclick="loadDependencies()">Обновить</button>
+                        <button class="btn btn-sm btn-primary" onclick="installAllDependencies()" id="btn-install-all" style="display:none;">Установить все</button>
+                    </div>
+                </div>
+                <div class="dependencies-content">
+                    <div class="dep-summary" id="dep-summary">
+                        <div class="dep-stat">
+                            <span class="dep-stat-value" id="dep-installed">—</span>
+                            <span class="dep-stat-label">Установлено</span>
+                        </div>
+                        <div class="dep-stat">
+                            <span class="dep-stat-value" id="dep-missing">—</span>
+                            <span class="dep-stat-label">Отсутствует</span>
+                        </div>
+                        <div class="dep-stat">
+                            <span class="dep-stat-value" id="dep-total">—</span>
+                            <span class="dep-stat-label">Всего</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dep-categories">
+                        <!-- System Dependencies -->
+                        <div class="dep-category">
+                            <h4>Системные пакеты (opkg)</h4>
+                            <div class="dep-list" id="dep-system-list">
+                                <div class="dep-loading">Загрузка...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Python Dependencies -->
+                        <div class="dep-category">
+                            <h4>Python пакеты (pip)</h4>
+                            <div class="dep-list" id="dep-python-list">
+                                <div class="dep-loading">Загрузка...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="dep-service-section">
+                        <h4>Служба PinPoint</h4>
+                        <div class="dep-service-status" id="dep-service-status">
+                            <span class="service-badge" id="service-badge">Проверка...</span>
+                        </div>
+                        <div class="dep-service-actions">
+                            <button class="btn btn-sm btn-primary" id="btn-service-enable" onclick="setupPinpointService()" style="display:none;">Включить автозапуск</button>
+                            <button class="btn btn-sm btn-danger" id="btn-service-disable" onclick="disablePinpointService()" style="display:none;">Отключить автозапуск</button>
+                        </div>
+                    </div>
+                    
+                    <div class="dep-actions">
+                        <button class="btn btn-secondary" onclick="showOpkgInfo()">📦 Информация opkg</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Logs - full width -->
+            <div class="settings-card logs-card">
+                <div class="settings-card-header">
+                    <span class="settings-icon">≡</span>
+                    <h3>Логи</h3>
+                    <button class="btn btn-sm btn-secondary" onclick="loadLogs()">Обновить</button>
+                </div>
+                <div class="logs-container" id="logs-container">
+                    <pre id="logs-content">Загрузка...</pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Help / Documentation -->
+        <section id="help" class="tab-content">
+            <div class="help-container">
+                <div class="help-hero">
+                    <h1>👋 Добро пожаловать в PinPoint!</h1>
+                    <p>Простое управление VPN-маршрутизацией на вашем роутере</p>
+                </div>
+
+                <div class="help-cards">
+                    <!-- Quick Start -->
+                    <div class="help-card help-card-primary">
+                        <div class="help-card-icon">🚀</div>
+                        <h2>Быстрый старт</h2>
+                        <div class="help-steps">
+                            <div class="help-step">
+                                <span class="step-num">1</span>
+                                <div>
+                                    <strong>Добавьте VPN-сервер</strong>
+                                    <p>Откройте <a href="#tunnels">Туннели</a> → нажмите "+ Добавить" → вставьте ссылку или подписку от вашего VPN-провайдера</p>
+                                </div>
+                            </div>
+                            <div class="help-step">
+                                <span class="step-num">2</span>
+                                <div>
+                                    <strong>Включите нужные сервисы</strong>
+                                    <p>Откройте <a href="#services">Сервисы</a> → включите сервисы, трафик которых должен идти через VPN (YouTube, Netflix и др.)</p>
+                                </div>
+                            </div>
+                            <div class="help-step">
+                                <span class="step-num">3</span>
+                                <div>
+                                    <strong>Готово!</strong>
+                                    <p>Трафик выбранных сервисов автоматически пойдёт через VPN. Всё остальное — напрямую.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- What is PinPoint -->
+                    <div class="help-card">
+                        <div class="help-card-icon">❓</div>
+                        <h2>Что такое PinPoint?</h2>
+                        <p>PinPoint позволяет <strong>выборочно направлять трафик</strong> через VPN.</p>
+                        <p>Представьте: YouTube и Netflix идут через VPN (чтобы обойти блокировки), а остальные сайты работают напрямую (быстрее и без лишней нагрузки).</p>
+                        <div class="help-diagram">
+                            <div class="diagram-item">
+                                <span>📱 Ваши устройства</span>
+                            </div>
+                            <div class="diagram-arrow">↓</div>
+                            <div class="diagram-item highlight">
+                                <span>🌐 Роутер + PinPoint</span>
+                            </div>
+                            <div class="diagram-split">
+                                <div class="diagram-branch">
+                                    <div class="diagram-arrow">↙</div>
+                                    <div class="diagram-item vpn">🔒 VPN<br><small>YouTube, Netflix</small></div>
+                                </div>
+                                <div class="diagram-branch">
+                                    <div class="diagram-arrow">↘</div>
+                                    <div class="diagram-item direct">⚡ Напрямую<br><small>Всё остальное</small></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="help-cards">
+                    <!-- Tabs explanation -->
+                    <div class="help-card">
+                        <div class="help-card-icon">📑</div>
+                        <h2>Разделы меню</h2>
+                        <div class="help-menu-list">
+                            <div class="help-menu-item">
+                                <span class="menu-icon">◉</span>
+                                <div>
+                                    <strong>Главная</strong>
+                                    <p>Статус системы, графики нагрузки и трафика</p>
+                                </div>
+                            </div>
+                            <div class="help-menu-item">
+                                <span class="menu-icon">◎</span>
+                                <div>
+                                    <strong>Сервисы</strong>
+                                    <p>Включение/выключение готовых сервисов (YouTube, Netflix, Spotify и др.)</p>
+                                </div>
+                            </div>
+                            <div class="help-menu-item">
+                                <span class="menu-icon">▣</span>
+                                <div>
+                                    <strong>Устройства</strong>
+                                    <p>Список устройств в сети. Можно отключить VPN для конкретных устройств.</p>
+                                </div>
+                            </div>
+                            <div class="help-menu-item">
+                                <span class="menu-icon">≡</span>
+                                <div>
+                                    <strong>Правила</strong>
+                                    <p>Добавление своих доменов и создание кастомных сервисов</p>
+                                </div>
+                            </div>
+                            <div class="help-menu-item">
+                                <span class="menu-icon">◈</span>
+                                <div>
+                                    <strong>Туннели</strong>
+                                    <p>Управление VPN-серверами, подписками и маршрутизацией</p>
+                                </div>
+                            </div>
+                            <div class="help-menu-item">
+                                <span class="menu-icon">○</span>
+                                <div>
+                                    <strong>Настройки</strong>
+                                    <p>Обновления, блокировка рекламы, зависимости системы</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FAQ -->
+                    <div class="help-card">
+                        <div class="help-card-icon">💡</div>
+                        <h2>Частые вопросы</h2>
+                        <div class="faq-list">
+                            <details class="faq-item">
+                                <summary>Где взять ссылку на VPN?</summary>
+                                <p>Ваш VPN-провайдер (например, Outline, VLESS, Shadowsocks) даёт ссылку для подключения. Обычно это выглядит как <code>vless://...</code> или <code>ss://...</code>. Просто скопируйте её и вставьте в PinPoint.</p>
+                            </details>
+                            <details class="faq-item">
+                                <summary>Что такое подписка?</summary>
+                                <p>Подписка — это ссылка, которая автоматически содержит список серверов. PinPoint сам скачает и добавит все серверы. Удобно, если у провайдера много серверов.</p>
+                            </details>
+                            <details class="faq-item">
+                                <summary>Можно добавить свой домен?</summary>
+                                <p>Да! Откройте <a href="#domains">Правила</a> → "Добавить домен" или создайте свой сервис из нескольких доменов.</p>
+                            </details>
+                            <details class="faq-item">
+                                <summary>Как направить разные сервисы через разные серверы?</summary>
+                                <p>Добавьте 2+ сервера в <a href="#tunnels">Туннели</a>. Внизу появится "Маршрутизация сервисов" — там можно выбрать, какой сервис через какой сервер идёт.</p>
+                            </details>
+                            <details class="faq-item">
+                                <summary>VPN замедляет интернет?</summary>
+                                <p>Немного, но PinPoint направляет через VPN только нужный трафик. Остальное идёт напрямую на полной скорости.</p>
+                            </details>
+                            <details class="faq-item">
+                                <summary>Как отключить VPN для телевизора?</summary>
+                                <p>Откройте <a href="#devices">Устройства</a> → найдите телевизор → нажмите "Исключить". Его трафик будет идти напрямую.</p>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="help-cards">
+                    <!-- Glossary -->
+                    <div class="help-card help-card-wide">
+                        <div class="help-card-icon">📖</div>
+                        <h2>Словарь терминов</h2>
+                        <div class="glossary-grid">
+                            <div class="glossary-item">
+                                <strong>VPN</strong>
+                                <p>Виртуальная частная сеть. Шифрует трафик и позволяет обходить блокировки.</p>
+                            </div>
+                            <div class="glossary-item">
+                                <strong>Туннель</strong>
+                                <p>Подключение к VPN-серверу. Один туннель = один сервер.</p>
+                            </div>
+                            <div class="glossary-item">
+                                <strong>Подписка</strong>
+                                <p>Ссылка с автообновляемым списком серверов от провайдера.</p>
+                            </div>
+                            <div class="glossary-item">
+                                <strong>Сервис</strong>
+                                <p>Набор доменов (например, YouTube = youtube.com + googlevideo.com + ytimg.com).</p>
+                            </div>
+                            <div class="glossary-item">
+                                <strong>Маршрутизация</strong>
+                                <p>Правила, определяющие куда направлять трафик — через VPN или напрямую.</p>
+                            </div>
+                            <div class="glossary-item">
+                                <strong>sing-box</strong>
+                                <p>Движок VPN, который работает "под капотом". PinPoint управляет им автоматически.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="help-footer">
+                    <p>Нужна помощь? Создайте issue на <a href="https://github.com" target="_blank">GitHub</a></p>
+                </div>
+            </div>
+        </section>
+
+            <footer>
+                <p>PinPoint v1.1 | <a href="/docs" target="_blank">API</a> | <a href="#" onclick="showAbout()">О программе</a></p>
+            </footer>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Обновление...</div>
+        <div class="loading-subtext" id="loading-subtext">Пожалуйста, подождите</div>
+    </div>
+
+    <!-- Chart.js for traffic graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/js/app.js?v=6"></script>
+</body>
+</html>
