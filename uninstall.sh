@@ -3,11 +3,20 @@
 # PinPoint Uninstaller for OpenWRT
 #
 # Usage:
-#   wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/uninstall.sh | sh
-#   Or locally: sh /opt/pinpoint/uninstall.sh
+#   curl -fsSL .../uninstall.sh | sh -s -- -y   # auto-confirm
+#   sh /opt/pinpoint/uninstall.sh               # interactive
+#   sh /opt/pinpoint/uninstall.sh -y            # auto-confirm
 #
 
 set -e
+
+# Parse arguments
+AUTO_CONFIRM=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes|--force) AUTO_CONFIRM=1 ;;
+    esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -46,17 +55,20 @@ if [ ! -d "$PINPOINT_DIR" ]; then
     exit 0
 fi
 
-printf "Are you sure you want to uninstall PinPoint? [y/N]: "
-read CONFIRM
-
-case "$CONFIRM" in
-    [yY][eE][sS]|[yY])
-        ;;
-    *)
-        echo "Cancelled."
-        exit 0
-        ;;
-esac
+# Confirm uninstall
+if [ "$AUTO_CONFIRM" = "1" ]; then
+    echo "Auto-confirm enabled (-y flag)"
+else
+    printf "Are you sure you want to uninstall PinPoint? [y/N]: "
+    read CONFIRM
+    case "$CONFIRM" in
+        [yY][eE][sS]|[yY]) ;;
+        *)
+            echo "Cancelled."
+            exit 0
+            ;;
+    esac
+fi
 
 echo ""
 
