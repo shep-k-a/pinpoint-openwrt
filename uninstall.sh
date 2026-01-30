@@ -18,6 +18,12 @@ for arg in "$@"; do
     esac
 done
 
+# Detect interactive mode (TTY available)
+INTERACTIVE=0
+if [ -t 0 ]; then
+    INTERACTIVE=1
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -122,34 +128,32 @@ else
 fi
 
 # ============================================
-# Ask about data
+# Ask about data (skip in non-interactive mode)
 # ============================================
-echo ""
-printf "Remove all data (history, settings, tunnels)? [y/N]: "
-read REMOVE_DATA
+KEEP_DATA=1
+DEP_CHOICE=1
 
-case "$REMOVE_DATA" in
-    [yY][eE][sS]|[yY])
-        KEEP_DATA=0
-        ;;
-    *)
-        KEEP_DATA=1
-        ;;
-esac
+if [ "$INTERACTIVE" = "1" ]; then
+    echo ""
+    printf "Remove all data (history, settings, tunnels)? [y/N]: "
+    read REMOVE_DATA
+    case "$REMOVE_DATA" in
+        [yY][eE][sS]|[yY]) KEEP_DATA=0 ;;
+    esac
 
-# ============================================
-# Ask about dependencies
-# ============================================
-echo ""
-echo "Dependency removal options:"
-echo "  1) Keep all dependencies (safe)"
-echo "  2) Remove only packages installed by PinPoint"
-echo "  3) Remove all PinPoint-related packages"
-echo ""
-printf "Choose [1]: "
-read DEP_CHOICE
-
-DEP_CHOICE="${DEP_CHOICE:-1}"
+    echo ""
+    echo "Dependency removal options:"
+    echo "  1) Keep all dependencies (safe)"
+    echo "  2) Remove only packages installed by PinPoint"
+    echo "  3) Remove all PinPoint-related packages"
+    echo ""
+    printf "Choose [1]: "
+    read DEP_CHOICE
+    DEP_CHOICE="${DEP_CHOICE:-1}"
+else
+    echo ""
+    info "Non-interactive: keeping data and dependencies"
+fi
 
 # ============================================
 # Remove dependencies based on choice
@@ -187,18 +191,22 @@ case "$DEP_CHOICE" in
         step "Removing Python packages..."
         pip3 uninstall -y uvicorn fastapi pyyaml httpx 2>/dev/null || true
         
-        # sing-box (main dependency)
-        printf "  Remove sing-box? [y/N]: "
-        read REMOVE_SINGBOX
-        case "$REMOVE_SINGBOX" in
-            [yY][eE][sS]|[yY])
-                opkg remove sing-box 2>/dev/null || true
-                info "sing-box removed"
-                ;;
-            *)
-                info "sing-box kept"
-                ;;
-        esac
+        # sing-box (main dependency) - only ask in interactive mode
+        if [ "$INTERACTIVE" = "1" ]; then
+            printf "  Remove sing-box? [y/N]: "
+            read REMOVE_SINGBOX
+            case "$REMOVE_SINGBOX" in
+                [yY][eE][sS]|[yY])
+                    opkg remove sing-box 2>/dev/null || true
+                    info "sing-box removed"
+                    ;;
+                *)
+                    info "sing-box kept"
+                    ;;
+            esac
+        else
+            info "sing-box kept (non-interactive)"
+        fi
         
         info "Packages removed"
         ;;
