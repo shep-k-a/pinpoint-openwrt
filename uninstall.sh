@@ -55,17 +55,13 @@ if [ ! -d "$PINPOINT_DIR" ]; then
     exit 0
 fi
 
-# Confirm uninstall
+# Confirm uninstall (skip if piped or -y flag)
 if [ "$AUTO_CONFIRM" = "1" ]; then
-    echo "Auto-confirm enabled"
-elif [ -t 0 ] || [ -e /dev/tty ]; then
-    # Try to read from terminal
+    echo "Uninstalling PinPoint..."
+elif [ -t 0 ]; then
+    # Interactive mode - ask for confirmation
     printf "Are you sure you want to uninstall PinPoint? [y/N]: "
-    if [ -e /dev/tty ]; then
-        read CONFIRM < /dev/tty
-    else
-        read CONFIRM
-    fi
+    read CONFIRM
     case "$CONFIRM" in
         [yY][eE][sS]|[yY]) ;;
         *)
@@ -74,8 +70,8 @@ elif [ -t 0 ] || [ -e /dev/tty ]; then
             ;;
     esac
 else
-    # No TTY available, auto-confirm for piped execution
-    echo "Non-interactive mode, proceeding..."
+    # Piped mode (curl | sh) - proceed without asking
+    echo "Uninstalling PinPoint..."
 fi
 
 echo ""
