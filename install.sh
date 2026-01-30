@@ -991,6 +991,52 @@ ROUTESCRIPT
 }
 
 # ============================================
+# Hotplug Scripts (auto-restore routing)
+# ============================================
+install_hotplug_scripts() {
+    echo ""
+    echo -e "${BLUE}Installing Hotplug Scripts${NC}"
+    echo "----------------------------------------"
+    
+    step "Installing network hotplug script..."
+    
+    # Hotplug for tun1 interface creation
+    cat > /etc/hotplug.d/net/99-pinpoint << 'HOTPLUGNET'
+#!/bin/sh
+# Reinitialize pinpoint routing when tun1 comes up
+
+[ "$ACTION" = "add" ] && [ "$INTERFACE" = "tun1" ] && {
+    logger -t pinpoint "tun1 interface added, initializing routing..."
+    sleep 1
+    /opt/pinpoint/scripts/pinpoint-init.sh start
+}
+HOTPLUGNET
+
+    chmod +x /etc/hotplug.d/net/99-pinpoint
+    
+    step "Installing iface hotplug script..."
+    
+    # Hotplug for interface changes
+    cat > /etc/hotplug.d/iface/99-pinpoint << 'HOTPLUGIFACE'
+#!/bin/sh
+# Reinitialize pinpoint routing on interface changes
+
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "sing_box" ] && {
+    logger -t pinpoint "sing_box interface up, checking routing..."
+    sleep 1
+    if ! ip route show table pinpoint 2>/dev/null | grep -q "default"; then
+        logger -t pinpoint "Route missing, reinitializing..."
+        /opt/pinpoint/scripts/pinpoint-init.sh start
+    fi
+}
+HOTPLUGIFACE
+
+    chmod +x /etc/hotplug.d/iface/99-pinpoint
+    
+    info "Hotplug scripts installed (auto-restore routing)"
+}
+
+# ============================================
 # sing-box Configuration
 # ============================================
 create_singbox_config() {
@@ -1221,6 +1267,7 @@ main() {
     setup_authentication
     create_init_script
     create_routing_scripts
+    install_hotplug_scripts
     create_singbox_config
     setup_firewall
     start_service

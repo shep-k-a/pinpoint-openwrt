@@ -1,0 +1,9 @@
+#!/bin/sh
+# Reinitialize pinpoint routing when tun1 comes up
+# Install to: /etc/hotplug.d/net/99-pinpoint
+
+[ "$ACTION" = "add" ] && [ "$INTERFACE" = "tun1" ] && {
+    logger -t pinpoint "tun1 interface added, initializing routing..."
+    sleep 1
+    /opt/pinpoint/scripts/pinpoint-init.sh start
+}

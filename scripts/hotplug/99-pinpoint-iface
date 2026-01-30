@@ -1,0 +1,14 @@
+#!/bin/sh
+# Reinitialize pinpoint routing on interface changes
+# Install to: /etc/hotplug.d/iface/99-pinpoint
+
+# Only act on 'ifup' for sing_box zone or after firewall reload
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "sing_box" ] && {
+    logger -t pinpoint "sing_box interface up, checking routing..."
+    sleep 1
+    # Check if route exists, add if missing
+    if ! ip route show table pinpoint 2>/dev/null | grep -q "default"; then
+        logger -t pinpoint "Route missing, reinitializing..."
+        /opt/pinpoint/scripts/pinpoint-init.sh start
+    fi
+}
