@@ -210,6 +210,12 @@ install_dependencies() {
     # DNS
     install_package "dnsmasq-full" "dnsmasq full" || install_package "dnsmasq" "dnsmasq"
     
+    # Lua for LuCI integration
+    install_package "lua" "Lua runtime"
+    install_package "luci-compat" "LuCI compatibility"
+    install_package "luci-lib-base" "LuCI base library"
+    install_package "luci-lib-nixio" "LuCI nixio library"
+    
     echo ""
     info "System dependencies installed"
 }
@@ -330,24 +336,61 @@ setup_luci() {
     # Create directories
     mkdir -p /usr/share/luci/menu.d
     mkdir -p /usr/share/rpcd/acl.d
-    mkdir -p /www/luci-static/resources/view/pinpoint
     mkdir -p /usr/lib/lua/luci/view/pinpoint
+    mkdir -p /usr/lib/lua/luci/controller/pinpoint
     
-    # Download LuCI redirect page
-    wget -q -O /www/pinpoint-redirect.html "$GITHUB_REPO/luci/index.html" || true
+    # Create Lua template for LuCI page
+    cat > /usr/lib/lua/luci/view/pinpoint/main.htm << 'LUAEOF'
+<%+header%>
+<style>
+.pinpoint-container{text-align:center;padding:40px;max-width:600px;margin:0 auto}
+.pinpoint-logo{width:80px;height:80px;margin:0 auto 20px;background:linear-gradient(135deg,#4a5568 0%,#6b5b7a 100%);border-radius:18px;display:flex;align-items:center;justify-content:center}
+.pinpoint-logo-dot{width:30px;height:30px;background:rgba(255,255,255,0.95);border-radius:50%}
+.pinpoint-title{font-size:28px;font-weight:bold;margin-bottom:10px;color:#4a5568}
+.pinpoint-desc{color:#666;margin-bottom:30px;font-size:16px}
+.pinpoint-btn{display:inline-block;background:linear-gradient(135deg,#4a5568 0%,#6b5b7a 100%);color:white !important;padding:15px 40px;border-radius:8px;text-decoration:none;font-size:18px;font-weight:500}
+.pinpoint-btn:hover{opacity:0.9}
+.pinpoint-info{margin-top:30px;padding:15px 25px;background:#f5f5f5;border-radius:8px;display:inline-block}
+.pinpoint-info p{margin:5px 0;color:#555}
+</style>
+<div class="pinpoint-container">
+<div class="pinpoint-logo"><div class="pinpoint-logo-dot"></div></div>
+<div class="pinpoint-title">PinPoint</div>
+<div class="pinpoint-desc">Selective VPN Routing for OpenWRT</div>
+<br>
+<a href="/pinpoint/" target="_blank" class="pinpoint-btn" onclick="this.href='http://'+location.hostname+':8080/';return true;">Open PinPoint Dashboard</a>
+<div class="pinpoint-info">
+<p><strong>Port:</strong> 8080</p>
+</div>
+</div>
+<%+footer%>
+LUAEOF
     
-    # Create CGI redirect script
-    cat > /www/cgi-bin/luci/admin/services/pinpoint << 'CGIEOF'
-#!/bin/sh
-echo "Content-Type: text/html"
-echo ""
-cat /www/pinpoint-redirect.html
-CGIEOF
+    # Fix line endings
+    sed -i 's/\r$//' /usr/lib/lua/luci/view/pinpoint/main.htm 2>/dev/null || true
     
-    chmod +x /www/cgi-bin/luci/admin/services/pinpoint 2>/dev/null || true
+    # Create Lua controller
+    cat > /usr/lib/lua/luci/controller/pinpoint/pinpoint.lua << 'CTRLEOF'
+module("luci.controller.pinpoint.pinpoint", package.seeall)
+
+function index()
+    entry({"admin", "services", "pinpoint"}, template("pinpoint/main"), _("PinPoint"), 90)
+end
+CTRLEOF
     
-    # Download menu config
-    wget -q -O /usr/share/luci/menu.d/luci-app-pinpoint.json "$GITHUB_REPO/luci/luci-app-pinpoint.json" || true
+    # Create menu JSON (for newer LuCI)
+    cat > /usr/share/luci/menu.d/luci-app-pinpoint.json << 'MENUEOF'
+{
+    "admin/services/pinpoint": {
+        "title": "PinPoint",
+        "order": 90,
+        "action": {
+            "type": "template",
+            "path": "pinpoint/main"
+        }
+    }
+}
+MENUEOF
     
     # Create ACL file for permissions
     cat > /usr/share/rpcd/acl.d/luci-app-pinpoint.json << 'ACLEOF'
