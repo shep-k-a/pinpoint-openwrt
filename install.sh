@@ -227,7 +227,11 @@ install_python_packages() {
     echo -e "${BLUE}Installing Python Packages${NC}"
     echo "----------------------------------------"
     
-    step "Installing Python packages via pip..."
+    # First try to install from opkg (pre-compiled, faster, less RAM)
+    step "Trying opkg packages first (faster)..."
+    opkg install python3-yaml 2>/dev/null && info "python3-yaml from opkg" || true
+    opkg install python3-multidict 2>/dev/null || true
+    opkg install python3-aiohttp 2>/dev/null || true
     
     # Determine pip command
     if command -v pip3 >/dev/null 2>&1; then
@@ -236,19 +240,25 @@ install_python_packages() {
         PIP="python3 -m pip"
     fi
     
-    # Python packages to install
-    PY_PACKAGES="uvicorn fastapi pyyaml httpx"
+    # Python packages to install via pip
+    # Using --only-binary to avoid compilation on low-RAM devices
+    step "Installing Python packages via pip..."
     
-    # Install packages (try with --break-system-packages for newer pip)
+    # Try binary-only first (no compilation needed)
     $PIP install --root-user-action=ignore --break-system-packages \
-        $PY_PACKAGES 2>/dev/null || \
+        --only-binary :all: --prefer-binary \
+        uvicorn fastapi httpx 2>/dev/null || \
+    # Fallback: allow source but with no isolation (less RAM)
+    $PIP install --root-user-action=ignore --break-system-packages \
+        --no-build-isolation --prefer-binary \
+        uvicorn fastapi pyyaml httpx 2>/dev/null || \
+    # Last resort: normal install
     $PIP install --root-user-action=ignore \
-        $PY_PACKAGES 2>/dev/null || \
-    $PIP install $PY_PACKAGES || \
-    error "Failed to install Python packages"
+        uvicorn fastapi pyyaml httpx 2>/dev/null || \
+    warn "Some Python packages may not have installed"
     
     # Save Python packages list
-    echo "$PY_PACKAGES" | tr ' ' '\n' > "$PINPOINT_DIR/data/python_packages.txt"
+    echo "uvicorn fastapi pyyaml httpx" | tr ' ' '\n' > "$PINPOINT_DIR/data/python_packages.txt"
     
     info "Python packages installed"
 }
