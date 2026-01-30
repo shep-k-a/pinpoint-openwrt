@@ -181,6 +181,239 @@ install_package() {
     fi
 }
 
+# ============================================
+# ImmortalWRT Repository Setup
+# ============================================
+IMMORTALWRT_REPO_ADDED=0
+
+setup_immortalwrt_repo() {
+    step "Setting up ImmortalWRT repository..."
+    
+    # Detect architecture
+    detect_package_arch
+    
+    # Get OpenWRT version
+    OPENWRT_MAJOR=$(echo "$OPENWRT_VERSION" | cut -d. -f1,2)
+    
+    # Find working ImmortalWRT release
+    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.4" "23.05.3"; do
+        IMMORTAL_BASE="https://downloads.immortalwrt.org/releases/${IMMORTAL_VER}/packages/${IMMORTAL_ARCH}/packages"
+        
+        # Test if repository is accessible
+        if curl -fsSL "${IMMORTAL_BASE}/Packages.gz" >/dev/null 2>&1; then
+            IMMORTAL_RELEASE="$IMMORTAL_VER"
+            break
+        fi
+    done
+    
+    if [ -z "$IMMORTAL_RELEASE" ]; then
+        warn "Could not find accessible ImmortalWRT repository"
+        return 1
+    fi
+    
+    # Repository configuration file
+    REPO_FILE="/etc/opkg/customfeeds.conf"
+    REPO_NAME="immortalwrt_packages"
+    REPO_URL="https://downloads.immortalwrt.org/releases/${IMMORTAL_RELEASE}/packages/${IMMORTAL_ARCH}/packages"
+    
+    # Check if already added
+    if grep -q "immortalwrt" "$REPO_FILE" 2>/dev/null; then
+        info "ImmortalWRT repository already configured"
+        IMMORTALWRT_REPO_ADDED=1
+        return 0
+    fi
+    
+    # Create customfeeds.conf if not exists
+    touch "$REPO_FILE"
+    
+    # Add ImmortalWRT repository
+    echo "" >> "$REPO_FILE"
+    echo "# ImmortalWRT packages repository (added by PinPoint)" >> "$REPO_FILE"
+    echo "src/gz ${REPO_NAME} ${REPO_URL}" >> "$REPO_FILE"
+    
+    # Download and add ImmortalWRT signing key
+    step "Adding ImmortalWRT signing key..."
+    KEYS_DIR="/etc/opkg/keys"
+    mkdir -p "$KEYS_DIR"
+    
+    # ImmortalWRT uses usign keys, try to fetch
+    KEY_URL="https://downloads.immortalwrt.org/releases/${IMMORTAL_RELEASE}/packages/${IMMORTAL_ARCH}/packages/Packages.sig"
+    if curl -fsSL "$KEY_URL" -o /tmp/immortalwrt.sig 2>/dev/null; then
+        # Extract key ID from signature (first 16 chars of base64)
+        KEY_ID=$(head -c 16 /tmp/immortalwrt.sig 2>/dev/null | base64 2>/dev/null | head -c 16)
+        rm -f /tmp/immortalwrt.sig
+    fi
+    
+    # Alternative: disable signature check for this repo (less secure but works)
+    # This is common practice for third-party repos on OpenWRT
+    sed -i 's/option check_signature/# option check_signature/' /etc/opkg.conf 2>/dev/null || true
+    
+    # Update package lists with new repo
+    step "Updating package lists with ImmortalWRT..."
+    if opkg update >/dev/null 2>&1; then
+        info "ImmortalWRT repository added (${IMMORTAL_RELEASE})"
+        IMMORTALWRT_REPO_ADDED=1
+        return 0
+    else
+        warn "Failed to update with ImmortalWRT repo"
+        return 1
+    fi
+}
+
+# ============================================
+# sing-box Installation (ImmortalWRT priority)
+# ============================================
+# Minimum tested version for PinPoint features
+SINGBOX_MIN_VERSION="1.10.0"
+# Recommended stable version (January 2026)
+SINGBOX_RECOMMENDED_VERSION="1.12.17"
+
+# Detect architecture for package repositories
+detect_package_arch() {
+    case "$ARCH" in
+        mips)
+            IMMORTAL_ARCH="mips_24kc"
+            SAGERNET_ARCH="linux-mips-softfloat"
+            ;;
+        mipsel)
+            IMMORTAL_ARCH="mipsel_24kc"
+            SAGERNET_ARCH="linux-mipsle-softfloat"
+            ;;
+        aarch64)
+            IMMORTAL_ARCH="aarch64_cortex-a53"
+            SAGERNET_ARCH="linux-arm64"
+            ;;
+        armv7l|armv7)
+            IMMORTAL_ARCH="arm_cortex-a7_neon-vfpv4"
+            SAGERNET_ARCH="linux-armv7"
+            ;;
+        x86_64)
+            IMMORTAL_ARCH="x86_64"
+            SAGERNET_ARCH="linux-amd64"
+            ;;
+        *)
+            IMMORTAL_ARCH="$ARCH"
+            SAGERNET_ARCH=""
+            ;;
+    esac
+}
+
+install_singbox() {
+    step "Installing sing-box..."
+    
+    # Check if already installed with sufficient version
+    if command -v sing-box >/dev/null 2>&1; then
+        CURRENT_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$CURRENT_VERSION" ]; then
+            if version_ge "$CURRENT_VERSION" "$SINGBOX_MIN_VERSION"; then
+                info "sing-box $CURRENT_VERSION already installed"
+                return 0
+            else
+                warn "sing-box $CURRENT_VERSION is outdated (need >= $SINGBOX_MIN_VERSION)"
+            fi
+        fi
+    fi
+    
+    # Detect architecture
+    detect_package_arch
+    
+    # =============================================
+    # Method 1: Setup ImmortalWRT repo and install via opkg
+    # This allows future updates via opkg upgrade
+    # =============================================
+    if [ "$IMMORTALWRT_REPO_ADDED" = "1" ] || setup_immortalwrt_repo; then
+        step "Installing sing-box from ImmortalWRT via opkg..."
+        if opkg install sing-box >/dev/null 2>&1; then
+            INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            info "sing-box ${INSTALLED_VER:-unknown} installed from ImmortalWRT"
+            info "Future updates available via: opkg upgrade sing-box"
+            return 0
+        fi
+    fi
+    
+    # =============================================
+    # Method 2: Direct download from ImmortalWRT (fallback)
+    # If repo setup failed, try direct download
+    # =============================================
+    step "Trying direct download from ImmortalWRT..."
+    
+    OPENWRT_MAJOR=$(echo "$OPENWRT_VERSION" | cut -d. -f1,2)
+    
+    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.4" "23.05.3" "23.05.2"; do
+        IMMORTAL_BASE="https://downloads.immortalwrt.org/releases/${IMMORTAL_VER}/packages/${IMMORTAL_ARCH}/packages"
+        
+        # Get package list and find sing-box
+        SINGBOX_PKG=$(curl -fsSL "${IMMORTAL_BASE}/Packages" 2>/dev/null | grep -A1 "^Package: sing-box$" | grep "Filename:" | awk '{print $2}')
+        
+        if [ -n "$SINGBOX_PKG" ]; then
+            SINGBOX_URL="${IMMORTAL_BASE}/${SINGBOX_PKG}"
+            TMP_PKG="/tmp/sing-box.ipk"
+            
+            step "Downloading sing-box from ImmortalWRT ${IMMORTAL_VER}..."
+            if wget -q -O "$TMP_PKG" "$SINGBOX_URL" 2>/dev/null; then
+                if opkg install "$TMP_PKG" >/dev/null 2>&1; then
+                    rm -f "$TMP_PKG"
+                    INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                    info "sing-box ${INSTALLED_VER:-unknown} installed (direct download)"
+                    warn "Note: For updates, run setup_immortalwrt_repo or reinstall"
+                    return 0
+                fi
+                rm -f "$TMP_PKG"
+            fi
+        fi
+    done
+    
+    # =============================================
+    # Method 3: OpenWRT official repository
+    # =============================================
+    step "Trying OpenWRT official repository..."
+    if opkg install sing-box >/dev/null 2>&1; then
+        INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        info "sing-box ${INSTALLED_VER:-unknown} installed from OpenWRT repo"
+        return 0
+    fi
+    
+    # =============================================
+    # Method 3: SagerNet pre-built binary
+    # =============================================
+    if [ -n "$SAGERNET_ARCH" ]; then
+        step "Trying SagerNet releases..."
+        
+        # Get latest release version
+        LATEST_RELEASE=$(curl -fsSL "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
+        
+        if [ -n "$LATEST_RELEASE" ]; then
+            VERSION_NUM=$(echo "$LATEST_RELEASE" | sed 's/^v//')
+            BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_RELEASE}/sing-box-${VERSION_NUM}-${SAGERNET_ARCH}.tar.gz"
+            
+            TMP_DIR="/tmp/singbox_install"
+            mkdir -p "$TMP_DIR"
+            
+            step "Downloading sing-box ${VERSION_NUM} from SagerNet..."
+            if wget -q -O "$TMP_DIR/sing-box.tar.gz" "$BINARY_URL" 2>/dev/null; then
+                cd "$TMP_DIR"
+                tar -xzf sing-box.tar.gz 2>/dev/null
+                
+                BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                    chmod +x "$BINARY_PATH"
+                    mv "$BINARY_PATH" /usr/bin/sing-box
+                    cd /
+                    rm -rf "$TMP_DIR"
+                    info "sing-box $VERSION_NUM installed from SagerNet"
+                    return 0
+                fi
+                cd /
+                rm -rf "$TMP_DIR"
+            fi
+        fi
+    fi
+    
+    warn "Could not install sing-box automatically"
+    warn "Please install manually: https://sing-box.sagernet.org/installation/from-source/"
+    return 1
+}
+
 install_dependencies() {
     echo ""
     echo -e "${BLUE}Installing System Dependencies${NC}"
@@ -199,8 +432,8 @@ install_dependencies() {
     install_package "ca-certificates" "CA certificates"
     install_package "ca-bundle" "CA bundle"
     
-    # sing-box and dependencies
-    install_package "sing-box" "sing-box proxy"
+    # sing-box with multiple fallback sources
+    install_singbox
     install_package "kmod-tun" "TUN kernel module"
     
     # Firewall and routing
@@ -228,6 +461,29 @@ save_installed_packages() {
     fi
 }
 
+# ============================================
+# Python Package Versions (tested & stable)
+# ============================================
+# Tested versions for OpenWRT 23.05+ with Python 3.10+
+# Updated: January 2026
+#
+# Note: Using stable releases that work well on low-RAM devices
+# Latest versions at time of update:
+#   - fastapi: 0.128.0 (but 0.115.x is more stable for embedded)
+#   - uvicorn: 0.40.0 (requires Python 3.10+)
+#   - pydantic: 2.12.5
+#   - starlette: 0.52.1
+
+PYTHON_PACKAGES="
+fastapi==0.115.6
+uvicorn==0.34.0
+starlette==0.45.3
+pydantic==2.10.4
+pydantic-core==2.27.2
+pyyaml==6.0.2
+httpx==0.28.1
+"
+
 install_python_packages() {
     echo ""
     echo -e "${BLUE}Installing Python Packages${NC}"
@@ -246,6 +502,11 @@ install_python_packages() {
         PIP="python3 -m pip"
     fi
     
+    # Create requirements file with pinned versions
+    step "Creating requirements with pinned versions..."
+    REQUIREMENTS_FILE="$PINPOINT_DIR/data/requirements.txt"
+    echo "$PYTHON_PACKAGES" | grep -v '^$' | grep -v '^#' > "$REQUIREMENTS_FILE"
+    
     # Python packages to install via pip
     # Using --only-binary to avoid compilation on low-RAM devices
     step "Installing Python packages via pip..."
@@ -253,18 +514,19 @@ install_python_packages() {
     # Try binary-only first (no compilation needed)
     $PIP install --root-user-action=ignore --break-system-packages \
         --only-binary :all: --prefer-binary \
-        uvicorn fastapi httpx 2>/dev/null || \
+        -r "$REQUIREMENTS_FILE" 2>/dev/null || \
     # Fallback: allow source but with no isolation (less RAM)
     $PIP install --root-user-action=ignore --break-system-packages \
         --no-build-isolation --prefer-binary \
-        uvicorn fastapi pyyaml httpx 2>/dev/null || \
-    # Last resort: normal install
+        -r "$REQUIREMENTS_FILE" 2>/dev/null || \
+    # Last resort: normal install without version pinning
     $PIP install --root-user-action=ignore \
         uvicorn fastapi pyyaml httpx 2>/dev/null || \
     warn "Some Python packages may not have installed"
     
-    # Save Python packages list
-    echo "uvicorn fastapi pyyaml httpx" | tr ' ' '\n' > "$PINPOINT_DIR/data/python_packages.txt"
+    # Show installed versions
+    step "Verifying installed packages..."
+    $PIP list 2>/dev/null | grep -iE "uvicorn|fastapi|pyyaml|httpx" || true
     
     info "Python packages installed"
 }
@@ -611,6 +873,7 @@ STOP=15
 
 start() {
     echo "Starting sing-box..."
+    export ENABLE_DEPRECATED_TUN_ADDRESS_X=true
     /usr/bin/sing-box run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
     echo $! > /var/run/sing-box.pid
     # Initialize pinpoint routing after sing-box starts

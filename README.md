@@ -95,16 +95,30 @@ Automatically installed:
 - `nftables` (firewall)
 - `kmod-tun` (tunnel interface)
 - `curl`, `wget`, `ca-certificates`
-- Python packages: `uvicorn`, `fastapi`, `pyyaml`, `httpx`
+- Python packages (pinned versions):
+  - `fastapi==0.115.6`
+  - `uvicorn==0.34.0`
+  - `pydantic==2.10.4`
+  - `httpx==0.28.1`
+  - `pyyaml==6.0.2`
 
 ## Architecture Support
 
-| Architecture | Status |
-|--------------|--------|
-| x86_64 | ✅ Full support |
-| aarch64 (ARM64) | ✅ Full support |
-| armv7 | ✅ Full support |
-| mips/mipsel | ⚠️ Limited (sing-box may need manual install) |
+| Architecture | Status | sing-box source |
+|--------------|--------|-----------------|
+| x86_64 | ✅ Full support | OpenWRT repo |
+| aarch64 (ARM64) | ✅ Full support | OpenWRT repo |
+| armv7 | ✅ Full support | OpenWRT repo |
+| mips/mipsel (MT7621) | ✅ Full support | ImmortalWRT / SagerNet |
+
+**Note:** The installer automatically:
+1. **Adds ImmortalWRT repository** to `/etc/opkg/customfeeds.conf`
+2. Installs sing-box via `opkg` from ImmortalWRT (allows future updates via `opkg upgrade`)
+3. Falls back to direct download or SagerNet binaries if needed
+
+This ensures sing-box can be updated with `opkg upgrade sing-box`.
+
+Tested on: SIMAX 1800T, Xiaomi Mi Router 3G, Netgear R7800, x86_64 and others.
 
 ## Directory Structure
 

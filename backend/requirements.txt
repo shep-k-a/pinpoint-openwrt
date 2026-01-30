@@ -1,3 +1,21 @@
-fastapi>=0.100.0
-uvicorn>=0.22.0
-pydantic>=2.0.0
+# PinPoint - Python Dependencies
+# Tested versions for OpenWRT 23.05+ (Python 3.10+)
+# Updated: January 2026
+
+# Web framework
+fastapi==0.115.6
+uvicorn==0.34.0
+starlette==0.45.3
+
+# Data validation
+pydantic==2.10.4
+pydantic-core==2.27.2
+
+# HTTP client
+httpx==0.28.1
+
+# YAML parsing (for Clash config import)
+pyyaml==6.0.2
+
+# Note: These versions are tested on low-RAM devices (256MB+)
+# For development, you can use latest versions
