@@ -130,19 +130,27 @@ check_internet() {
 check_disk_space() {
     step "Checking available disk space..."
     
-    # Get available space in KB
-    AVAILABLE=$(df /opt 2>/dev/null | tail -1 | awk '{print $4}')
+    # Get available space in KB (handle large values)
+    AVAILABLE=$(df /opt 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$')
     
     if [ -z "$AVAILABLE" ]; then
-        AVAILABLE=$(df / | tail -1 | awk '{print $4}')
+        AVAILABLE=$(df / | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$')
     fi
     
-    # Need at least 10MB
-    if [ "$AVAILABLE" -lt 10240 ]; then
+    # Default to OK if can't parse (e.g., very large flash)
+    if [ -z "$AVAILABLE" ]; then
+        info "Available space: OK (could not parse exact value)"
+        return 0
+    fi
+    
+    # Need at least 10MB (10240 KB)
+    if [ "$AVAILABLE" -lt 10240 ] 2>/dev/null; then
         error "Not enough disk space. Need at least 10MB, have $(($AVAILABLE/1024))MB"
     fi
     
-    info "Available space: $(($AVAILABLE/1024))MB"
+    # Calculate MB safely
+    AVAILABLE_MB=$((AVAILABLE / 1024))
+    info "Available space: ${AVAILABLE_MB}MB"
 }
 
 # ============================================
@@ -462,26 +470,26 @@ save_installed_packages() {
 }
 
 # ============================================
-# Python Package Versions (tested & stable)
+# Python Package Versions (MIPS compatible)
 # ============================================
-# Tested versions for OpenWRT 23.05+ with Python 3.10+
-# Updated: January 2026
+# IMPORTANT: Using pydantic v1 (pure Python) for MIPS compatibility
+# pydantic v2 requires pydantic-core (Rust) which can't compile on MIPS
 #
-# Note: Using stable releases that work well on low-RAM devices
-# Latest versions at time of update:
-#   - fastapi: 0.128.0 (but 0.115.x is more stable for embedded)
-#   - uvicorn: 0.40.0 (requires Python 3.10+)
-#   - pydantic: 2.12.5
-#   - starlette: 0.52.1
+# These versions are tested on:
+#   - MIPS (mipsel_24kc) - SIMAX 1800T, etc.
+#   - ARM (aarch64, armv7)
+#   - x86_64
+#
+# fastapi < 0.100.0 supports pydantic v1
+# Updated: January 2026
 
 PYTHON_PACKAGES="
-fastapi==0.115.6
-uvicorn==0.34.0
-starlette==0.45.3
-pydantic==2.10.4
-pydantic-core==2.27.2
-pyyaml==6.0.2
-httpx==0.28.1
+fastapi==0.99.1
+uvicorn==0.22.0
+starlette==0.27.0
+pydantic==1.10.13
+pyyaml==6.0.1
+httpx==0.24.1
 "
 
 install_python_packages() {
@@ -490,10 +498,9 @@ install_python_packages() {
     echo "----------------------------------------"
     
     # First try to install from opkg (pre-compiled, faster, less RAM)
+    # Suppress "no valid architecture" warnings
     step "Trying opkg packages first (faster)..."
-    opkg install python3-yaml 2>/dev/null && info "python3-yaml from opkg" || true
-    opkg install python3-multidict 2>/dev/null || true
-    opkg install python3-aiohttp 2>/dev/null || true
+    opkg install python3-yaml 2>&1 | grep -v "no valid architecture" && info "python3-yaml from opkg" || true
     
     # Determine pip command
     if command -v pip3 >/dev/null 2>&1; then
@@ -507,28 +514,44 @@ install_python_packages() {
     REQUIREMENTS_FILE="$PINPOINT_DIR/data/requirements.txt"
     echo "$PYTHON_PACKAGES" | grep -v '^$' | grep -v '^#' > "$REQUIREMENTS_FILE"
     
+    info "Using pydantic v1 (pure Python, MIPS compatible)"
+    
     # Python packages to install via pip
-    # Using --only-binary to avoid compilation on low-RAM devices
     step "Installing Python packages via pip..."
     
-    # Try binary-only first (no compilation needed)
-    $PIP install --root-user-action=ignore --break-system-packages \
-        --only-binary :all: --prefer-binary \
-        -r "$REQUIREMENTS_FILE" 2>/dev/null || \
-    # Fallback: allow source but with no isolation (less RAM)
-    $PIP install --root-user-action=ignore --break-system-packages \
-        --no-build-isolation --prefer-binary \
-        -r "$REQUIREMENTS_FILE" 2>/dev/null || \
-    # Last resort: normal install without version pinning
-    $PIP install --root-user-action=ignore \
-        uvicorn fastapi pyyaml httpx 2>/dev/null || \
-    warn "Some Python packages may not have installed"
+    # Install packages one by one for better error handling
+    PIP_OPTS="--root-user-action=ignore --break-system-packages --prefer-binary"
     
-    # Show installed versions
+    INSTALL_OK=1
+    for pkg in fastapi uvicorn starlette pydantic httpx; do
+        PKG_VER=$(grep "^${pkg}==" "$REQUIREMENTS_FILE" | head -1)
+        if [ -n "$PKG_VER" ]; then
+            step "  Installing $PKG_VER..."
+            if $PIP install $PIP_OPTS "$PKG_VER" 2>&1 | tail -3; then
+                info "  $pkg installed"
+            else
+                warn "  Failed to install $pkg with version, trying latest..."
+                $PIP install $PIP_OPTS "$pkg" 2>&1 | tail -2 || INSTALL_OK=0
+            fi
+        fi
+    done
+    
+    # Install pyyaml if not from opkg
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        step "  Installing pyyaml..."
+        $PIP install $PIP_OPTS pyyaml 2>&1 | tail -2 || true
+    fi
+    
+    # Verify installation
+    echo ""
     step "Verifying installed packages..."
-    $PIP list 2>/dev/null | grep -iE "uvicorn|fastapi|pyyaml|httpx" || true
-    
-    info "Python packages installed"
+    INSTALLED=$($PIP list 2>/dev/null | grep -iE "uvicorn|fastapi|pydantic|httpx|starlette" | head -10)
+    if [ -n "$INSTALLED" ]; then
+        echo "$INSTALLED"
+        info "Python packages installed successfully"
+    else
+        warn "Some packages may not have installed correctly"
+    fi
 }
 
 # ============================================

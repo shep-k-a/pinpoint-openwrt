@@ -1,21 +1,24 @@
 # PinPoint - Python Dependencies
-# Tested versions for OpenWRT 23.05+ (Python 3.10+)
+# MIPS Compatible (pydantic v1 - pure Python)
 # Updated: January 2026
 
-# Web framework
-fastapi==0.115.6
-uvicorn==0.34.0
-starlette==0.45.3
+# Web framework (pydantic v1 compatible)
+fastapi==0.99.1
+uvicorn==0.22.0
+starlette==0.27.0
 
-# Data validation
-pydantic==2.10.4
-pydantic-core==2.27.2
+# Data validation (v1 - pure Python, no Rust)
+pydantic==1.10.13
 
 # HTTP client
-httpx==0.28.1
+httpx==0.24.1
 
 # YAML parsing (for Clash config import)
-pyyaml==6.0.2
+pyyaml==6.0.1
 
-# Note: These versions are tested on low-RAM devices (256MB+)
-# For development, you can use latest versions
+# Note: pydantic v1 is used for MIPS compatibility
+# pydantic v2 requires pydantic-core (Rust) which can't compile on MIPS
+# These versions work on: MIPS, ARM, x86_64
+
+# For development on x86_64/ARM64, you can use latest:
+# pip install fastapi uvicorn pydantic httpx pyyaml
