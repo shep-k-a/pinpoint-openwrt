@@ -50,6 +50,16 @@ step() {
     echo -e "${CYAN}[→]${NC} $1"
 }
 
+# Quiet opkg - filter out noise but keep errors
+opkg_quiet() {
+    opkg "$@" 2>&1 | grep -v "no valid architecture" | grep -v "^Package .* ignoring.$" || true
+}
+
+# Silent opkg - no output unless error
+opkg_silent() {
+    opkg "$@" 2>&1 | grep -iE "error|failed|cannot|No space" || true
+}
+
 # ============================================
 # Version comparison
 # ============================================
@@ -162,7 +172,7 @@ INSTALLED_BY_PINPOINT=""
 
 update_packages() {
     step "Updating package lists..."
-    opkg update >/dev/null 2>&1 || warn "Could not update package lists"
+    opkg_silent update
     info "Package lists updated"
 }
 
@@ -178,12 +188,16 @@ install_package() {
     
     step "Installing $DESC ($PKG)..."
     
-    if opkg install "$PKG" >/dev/null 2>&1; then
+    # Install with filtered output
+    OUTPUT=$(opkg install "$PKG" 2>&1 | grep -v "no valid architecture" | grep -v "ignoring.$")
+    
+    if opkg list-installed 2>/dev/null | grep -q "^$PKG "; then
         info "$DESC installed"
-        # Track this package as installed by PinPoint
         INSTALLED_BY_PINPOINT="$INSTALLED_BY_PINPOINT $PKG"
         return 0
     else
+        # Show error output if failed
+        echo "$OUTPUT" | grep -iE "error|failed|cannot|No space" | head -2 || true
         warn "Failed to install $PKG"
         return 1
     fi
@@ -256,16 +270,12 @@ setup_immortalwrt_repo() {
     # This is common practice for third-party repos on OpenWRT
     sed -i 's/option check_signature/# option check_signature/' /etc/opkg.conf 2>/dev/null || true
     
-    # Update package lists with new repo
+    # Update package lists with new repo (suppress arch warnings)
     step "Updating package lists with ImmortalWRT..."
-    if opkg update >/dev/null 2>&1; then
-        info "ImmortalWRT repository added (${IMMORTAL_RELEASE})"
-        IMMORTALWRT_REPO_ADDED=1
-        return 0
-    else
-        warn "Failed to update with ImmortalWRT repo"
-        return 1
-    fi
+    opkg_silent update
+    info "ImmortalWRT repository added (${IMMORTAL_RELEASE})"
+    IMMORTALWRT_REPO_ADDED=1
+    return 0
 }
 
 # ============================================
@@ -327,21 +337,19 @@ install_singbox() {
     
     # =============================================
     # Method 1: Setup ImmortalWRT repo and install via opkg
-    # This allows future updates via opkg upgrade
     # =============================================
     if [ "$IMMORTALWRT_REPO_ADDED" = "1" ] || setup_immortalwrt_repo; then
         step "Installing sing-box from ImmortalWRT via opkg..."
-        if opkg install sing-box >/dev/null 2>&1; then
+        opkg_silent install sing-box
+        if command -v sing-box >/dev/null 2>&1; then
             INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
             info "sing-box ${INSTALLED_VER:-unknown} installed from ImmortalWRT"
-            info "Future updates available via: opkg upgrade sing-box"
             return 0
         fi
     fi
     
     # =============================================
     # Method 2: Direct download from ImmortalWRT (fallback)
-    # If repo setup failed, try direct download
     # =============================================
     step "Trying direct download from ImmortalWRT..."
     
@@ -357,16 +365,15 @@ install_singbox() {
             SINGBOX_URL="${IMMORTAL_BASE}/${SINGBOX_PKG}"
             TMP_PKG="/tmp/sing-box.ipk"
             
-            step "Downloading sing-box from ImmortalWRT ${IMMORTAL_VER}..."
+            step "  Downloading from ImmortalWRT ${IMMORTAL_VER}..."
             if wget -q -O "$TMP_PKG" "$SINGBOX_URL" 2>/dev/null; then
-                if opkg install "$TMP_PKG" >/dev/null 2>&1; then
-                    rm -f "$TMP_PKG"
+                opkg_silent install "$TMP_PKG"
+                rm -f "$TMP_PKG"
+                if command -v sing-box >/dev/null 2>&1; then
                     INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-                    info "sing-box ${INSTALLED_VER:-unknown} installed (direct download)"
-                    warn "Note: For updates, run setup_immortalwrt_repo or reinstall"
+                    info "sing-box ${INSTALLED_VER:-unknown} installed (direct)"
                     return 0
                 fi
-                rm -f "$TMP_PKG"
             fi
         fi
     done
@@ -375,7 +382,8 @@ install_singbox() {
     # Method 3: OpenWRT official repository
     # =============================================
     step "Trying OpenWRT official repository..."
-    if opkg install sing-box >/dev/null 2>&1; then
+    opkg_silent install sing-box
+    if command -v sing-box >/dev/null 2>&1; then
         INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         info "sing-box ${INSTALLED_VER:-unknown} installed from OpenWRT repo"
         return 0
@@ -496,11 +504,12 @@ install_python_packages() {
     echo ""
     echo -e "${BLUE}Installing Python Packages${NC}"
     echo "----------------------------------------"
+    info "Using pydantic v1 (pure Python, MIPS compatible)"
     
-    # First try to install from opkg (pre-compiled, faster, less RAM)
-    # Suppress "no valid architecture" warnings
-    step "Trying opkg packages first (faster)..."
-    opkg install python3-yaml 2>&1 | grep -v "no valid architecture" && info "python3-yaml from opkg" || true
+    # Try opkg first (pre-compiled, faster)
+    step "Installing from opkg (if available)..."
+    opkg_silent install python3-yaml
+    python3 -c "import yaml" 2>/dev/null && info "  python3-yaml OK" || true
     
     # Determine pip command
     if command -v pip3 >/dev/null 2>&1; then
@@ -509,49 +518,40 @@ install_python_packages() {
         PIP="python3 -m pip"
     fi
     
-    # Create requirements file with pinned versions
-    step "Creating requirements with pinned versions..."
+    # Create requirements file
     REQUIREMENTS_FILE="$PINPOINT_DIR/data/requirements.txt"
     echo "$PYTHON_PACKAGES" | grep -v '^$' | grep -v '^#' > "$REQUIREMENTS_FILE"
     
-    info "Using pydantic v1 (pure Python, MIPS compatible)"
-    
-    # Python packages to install via pip
+    # Install via pip (quiet mode, show only errors)
     step "Installing Python packages via pip..."
+    PIP_OPTS="--root-user-action=ignore --break-system-packages --prefer-binary -q"
     
-    # Install packages one by one for better error handling
-    PIP_OPTS="--root-user-action=ignore --break-system-packages --prefer-binary"
-    
-    INSTALL_OK=1
+    FAILED=""
     for pkg in fastapi uvicorn starlette pydantic httpx; do
         PKG_VER=$(grep "^${pkg}==" "$REQUIREMENTS_FILE" | head -1)
         if [ -n "$PKG_VER" ]; then
-            step "  Installing $PKG_VER..."
-            if $PIP install $PIP_OPTS "$PKG_VER" 2>&1 | tail -3; then
-                info "  $pkg installed"
-            else
-                warn "  Failed to install $pkg with version, trying latest..."
-                $PIP install $PIP_OPTS "$pkg" 2>&1 | tail -2 || INSTALL_OK=0
+            if $PIP install $PIP_OPTS "$PKG_VER" 2>&1 | grep -iE "error|failed" | head -1; then
+                # Retry without version
+                $PIP install $PIP_OPTS "$pkg" 2>/dev/null || FAILED="$FAILED $pkg"
             fi
         fi
     done
     
     # Install pyyaml if not from opkg
-    if ! python3 -c "import yaml" 2>/dev/null; then
-        step "  Installing pyyaml..."
-        $PIP install $PIP_OPTS pyyaml 2>&1 | tail -2 || true
+    python3 -c "import yaml" 2>/dev/null || $PIP install $PIP_OPTS pyyaml 2>/dev/null || true
+    
+    # Verify and show results
+    echo ""
+    step "Installed packages:"
+    INSTALLED=$($PIP list 2>/dev/null | grep -iE "uvicorn|fastapi|pydantic|httpx|starlette|pyyaml")
+    if [ -n "$INSTALLED" ]; then
+        echo "$INSTALLED" | while read line; do echo "  $line"; done
+        info "Python packages installed"
+    else
+        warn "Some packages may not have installed"
     fi
     
-    # Verify installation
-    echo ""
-    step "Verifying installed packages..."
-    INSTALLED=$($PIP list 2>/dev/null | grep -iE "uvicorn|fastapi|pydantic|httpx|starlette" | head -10)
-    if [ -n "$INSTALLED" ]; then
-        echo "$INSTALLED"
-        info "Python packages installed successfully"
-    else
-        warn "Some packages may not have installed correctly"
-    fi
+    [ -n "$FAILED" ] && warn "Failed packages:$FAILED" || true
 }
 
 # ============================================
