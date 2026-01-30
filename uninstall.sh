@@ -18,11 +18,6 @@ for arg in "$@"; do
     esac
 done
 
-# Auto-confirm if not running interactively (piped from curl)
-if [ ! -t 0 ]; then
-    AUTO_CONFIRM=1
-fi
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -62,10 +57,15 @@ fi
 
 # Confirm uninstall
 if [ "$AUTO_CONFIRM" = "1" ]; then
-    echo "Auto-confirm enabled (-y flag)"
-else
+    echo "Auto-confirm enabled"
+elif [ -t 0 ] || [ -e /dev/tty ]; then
+    # Try to read from terminal
     printf "Are you sure you want to uninstall PinPoint? [y/N]: "
-    read CONFIRM
+    if [ -e /dev/tty ]; then
+        read CONFIRM < /dev/tty
+    else
+        read CONFIRM
+    fi
     case "$CONFIRM" in
         [yY][eE][sS]|[yY]) ;;
         *)
@@ -73,6 +73,9 @@ else
             exit 0
             ;;
     esac
+else
+    # No TTY available, auto-confirm for piped execution
+    echo "Non-interactive mode, proceeding..."
 fi
 
 echo ""
