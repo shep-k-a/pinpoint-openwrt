@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0; url=http://openwrt.lan:8080/">
+    <title>PinPoint - Redirecting...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #4a5568 0%, #6b5b7a 100%);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-dot {
+            width: 30px;
+            height: 30px;
+            background: rgba(255,255,255,0.95);
+            border-radius: 50%;
+        }
+        h1 { margin: 0 0 10px; font-size: 32px; }
+        p { margin: 0; opacity: 0.9; }
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        a:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+    <script>
+        window.onload = function() {
+            var host = window.location.hostname;
+            var url = 'http://' + host + ':8080/';
+            setTimeout(function() {
+                window.location.href = url;
+            }, 500);
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><div class="logo-dot"></div></div>
+        <h1>PinPoint</h1>
+        <p>Redirecting to dashboard...</p>
+        <a href="http://openwrt.lan:8080/" onclick="this.href='http://'+window.location.hostname+':8080/';return true;">Click here if not redirected</a>
+    </div>
+</body>
+</html>

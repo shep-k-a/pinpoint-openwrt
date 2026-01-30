@@ -82,8 +82,8 @@ info "Init script removed"
 step "Removing LuCI integration..."
 rm -f /usr/share/luci/menu.d/luci-app-pinpoint.json
 rm -f /usr/share/rpcd/acl.d/luci-app-pinpoint.json
-rm -rf /usr/lib/lua/luci/view/pinpoint
-rm -rf /www/luci-static/resources/view/pinpoint
+rm -f /www/cgi-bin/luci/admin/services/pinpoint
+rm -f /www/pinpoint-redirect.html
 rm -rf /tmp/luci-*
 /etc/init.d/rpcd restart >/dev/null 2>&1 || true
 info "LuCI integration removed"

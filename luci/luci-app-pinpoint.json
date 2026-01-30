@@ -3,12 +3,9 @@
         "title": "PinPoint",
         "order": 90,
         "action": {
-            "type": "template",
-            "path": "pinpoint/main"
-        },
-        "depends": {
-            "acl": ["luci-app-pinpoint"],
-            "uci": {}
+            "type": "cgi",
+            "path": "admin/services/pinpoint",
+            "post": {}
         }
     }
 }

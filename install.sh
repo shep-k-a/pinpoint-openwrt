@@ -333,13 +333,21 @@ setup_luci() {
     mkdir -p /www/luci-static/resources/view/pinpoint
     mkdir -p /usr/lib/lua/luci/view/pinpoint
     
-    # Download LuCI files
-    wget -q -O /usr/share/luci/menu.d/luci-app-pinpoint.json "$GITHUB_REPO/luci/luci-app-pinpoint.json" || true
-    wget -q -O /usr/lib/lua/luci/view/pinpoint/main.htm "$GITHUB_REPO/luci/main.htm" || true
+    # Download LuCI redirect page
+    wget -q -O /www/pinpoint-redirect.html "$GITHUB_REPO/luci/index.html" || true
     
-    # Fix line endings (CRLF to LF)
-    sed -i 's/\r$//' /usr/lib/lua/luci/view/pinpoint/main.htm 2>/dev/null || true
-    sed -i 's/\r$//' /usr/share/luci/menu.d/luci-app-pinpoint.json 2>/dev/null || true
+    # Create CGI redirect script
+    cat > /www/cgi-bin/luci/admin/services/pinpoint << 'CGIEOF'
+#!/bin/sh
+echo "Content-Type: text/html"
+echo ""
+cat /www/pinpoint-redirect.html
+CGIEOF
+    
+    chmod +x /www/cgi-bin/luci/admin/services/pinpoint 2>/dev/null || true
+    
+    # Download menu config
+    wget -q -O /usr/share/luci/menu.d/luci-app-pinpoint.json "$GITHUB_REPO/luci/luci-app-pinpoint.json" || true
     
     # Create ACL file for permissions
     cat > /usr/share/rpcd/acl.d/luci-app-pinpoint.json << 'ACLEOF'
