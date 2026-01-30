@@ -18,7 +18,7 @@ set -e
 PINPOINT_VERSION="1.0.0"
 MIN_OPENWRT_VERSION="23.05"
 PINPOINT_DIR="/opt/pinpoint"
-GITHUB_REPO="https://raw.githubusercontent.com/USER/pinpoint/main"
+GITHUB_REPO="https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master"
 
 # ============================================
 # Colors

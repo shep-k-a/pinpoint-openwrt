@@ -28,13 +28,13 @@ PinPoint is a web-based management interface for routing specific services and d
 Run this command on your OpenWRT router:
 
 ```bash
-wget -O - https://raw.githubusercontent.com/USER/pinpoint/main/install.sh | sh
+wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 ```
 
 Or with curl:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/USER/pinpoint/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 ```
 
 The installer will:
@@ -57,7 +57,7 @@ Default is usually `http://192.168.1.1:8080`
 ## Uninstall
 
 ```bash
-wget -O - https://raw.githubusercontent.com/USER/pinpoint/main/uninstall.sh | sh
+wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/uninstall.sh | sh
 ```
 
 Or use the install script with `--uninstall` flag:

@@ -3,7 +3,7 @@
 # PinPoint Uninstaller for OpenWRT
 #
 # Usage:
-#   wget -O - https://raw.githubusercontent.com/USER/pinpoint/main/uninstall.sh | sh
+#   wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/uninstall.sh | sh
 #   Or locally: sh /opt/pinpoint/uninstall.sh
 #
 
@@ -228,5 +228,5 @@ if [ "$KEEP_DATA" -eq 1 ]; then
 fi
 
 echo "  To reinstall:"
-echo "  wget -O - https://raw.githubusercontent.com/USER/pinpoint/main/install.sh | sh"
+echo "  wget -O - https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh"
 echo ""
