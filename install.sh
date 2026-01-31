@@ -291,12 +291,15 @@ setup_immortalwrt_repo() {
 }
 
 # ============================================
-# sing-box Installation (ImmortalWRT priority)
+# sing-box Installation
 # ============================================
 # Minimum tested version for PinPoint features
 SINGBOX_MIN_VERSION="1.10.0"
-# Recommended stable version (January 2026)
-SINGBOX_RECOMMENDED_VERSION="1.12.17"
+# Pinned version - set to specific version for stability
+# Tested and verified to work with PinPoint
+SINGBOX_PINNED_VERSION="1.11.7"
+# Set to "1" to enforce pinned version, "0" to allow any >= MIN
+SINGBOX_PIN_ENABLED="1"
 
 # Detect architecture for package repositories
 detect_package_arch() {
@@ -335,7 +338,16 @@ install_singbox() {
     if command -v sing-box >/dev/null 2>&1; then
         CURRENT_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -n "$CURRENT_VERSION" ]; then
-            if version_ge "$CURRENT_VERSION" "$SINGBOX_MIN_VERSION"; then
+            # If pinning enabled, check exact version
+            if [ "$SINGBOX_PIN_ENABLED" = "1" ]; then
+                if [ "$CURRENT_VERSION" = "$SINGBOX_PINNED_VERSION" ]; then
+                    info "sing-box $CURRENT_VERSION already installed (pinned version)"
+                    return 0
+                else
+                    warn "sing-box $CURRENT_VERSION installed, but pinned version is $SINGBOX_PINNED_VERSION"
+                    step "Reinstalling with pinned version..."
+                fi
+            elif version_ge "$CURRENT_VERSION" "$SINGBOX_MIN_VERSION"; then
                 info "sing-box $CURRENT_VERSION already installed"
                 return 0
             else
@@ -348,7 +360,39 @@ install_singbox() {
     detect_package_arch
     
     # =============================================
-    # Method 1: Setup ImmortalWRT repo and install via opkg
+    # Method 1: SagerNet pinned version (PREFERRED)
+    # =============================================
+    if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH" ]; then
+        step "Installing pinned sing-box v${SINGBOX_PINNED_VERSION} from GitHub..."
+        
+        BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_PINNED_VERSION}/sing-box-${SINGBOX_PINNED_VERSION}-${SAGERNET_ARCH}.tar.gz"
+        
+        TMP_DIR="/tmp/singbox_install"
+        mkdir -p "$TMP_DIR"
+        
+        if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+            cd "$TMP_DIR"
+            tar -xzf sing-box.tar.gz 2>/dev/null
+            
+            BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+            if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                # Remove old version if exists
+                rm -f /usr/bin/sing-box 2>/dev/null
+                chmod +x "$BINARY_PATH"
+                mv "$BINARY_PATH" /usr/bin/sing-box
+                cd /
+                rm -rf "$TMP_DIR"
+                info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version)"
+                return 0
+            fi
+            cd /
+            rm -rf "$TMP_DIR"
+        fi
+        warn "Failed to download pinned version, trying alternatives..."
+    fi
+    
+    # =============================================
+    # Method 2: ImmortalWRT repo via opkg
     # =============================================
     if [ "$IMMORTALWRT_REPO_ADDED" = "1" ] || setup_immortalwrt_repo; then
         step "Installing sing-box from ImmortalWRT via opkg..."
@@ -361,7 +405,7 @@ install_singbox() {
     fi
     
     # =============================================
-    # Method 2: Direct download from ImmortalWRT (fallback)
+    # Method 3: Direct download from ImmortalWRT
     # =============================================
     step "Trying direct download from ImmortalWRT..."
     
@@ -383,7 +427,7 @@ install_singbox() {
                 rm -f "$TMP_PKG"
                 if command -v sing-box >/dev/null 2>&1; then
                     INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-                    info "sing-box ${INSTALLED_VER:-unknown} installed (direct)"
+                    info "sing-box ${INSTALLED_VER:-unknown} installed (ImmortalWRT direct)"
                     return 0
                 fi
             fi
@@ -391,7 +435,7 @@ install_singbox() {
     done
     
     # =============================================
-    # Method 3: OpenWRT official repository
+    # Method 4: OpenWRT official repository
     # =============================================
     step "Trying OpenWRT official repository..."
     opkg_silent install sing-box
@@ -402,12 +446,11 @@ install_singbox() {
     fi
     
     # =============================================
-    # Method 3: SagerNet pre-built binary
+    # Method 5: SagerNet latest release (fallback)
     # =============================================
     if [ -n "$SAGERNET_ARCH" ]; then
-        step "Trying SagerNet releases..."
+        step "Trying SagerNet latest release..."
         
-        # Get latest release version
         LATEST_RELEASE=$(curl -fsSL "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
         
         if [ -n "$LATEST_RELEASE" ]; then
