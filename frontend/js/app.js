@@ -605,7 +605,7 @@ async function loadCustomServices() {
                         <input type="checkbox" 
                                ${service.enabled ? 'checked' : ''} 
                                onchange="toggleCustomService('${service.id}')">
-                        <span class="toggle-slider"></span>
+                        <span class="slider"></span>
                     </label>
                 </div>
                 ${service.description ? `<div class="custom-service-desc">${service.description}</div>` : ''}
