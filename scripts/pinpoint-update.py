@@ -289,13 +289,27 @@ def load_nftables_sets():
     subprocess.run(["nft", "flush", "set", "inet", "pinpoint", "tunnel_nets"], 
                    capture_output=True)
     
-    # Load all CIDR files
+    # Get list of enabled services
+    enabled_services = set()
+    if SERVICES_FILE.exists():
+        with open(SERVICES_FILE) as f:
+            data = json.load(f)
+        for service in data.get('services', []):
+            if service.get('enabled', False):
+                enabled_services.add(service.get('id', ''))
+    
+    # Load CIDR files only for enabled services
     loaded = 0
     for cidr_file in LISTS_DIR.glob("*.txt"):
         # Skip domain files
         if "_domains" in cidr_file.name:
             continue
         if "_static" in cidr_file.name:
+            continue
+        
+        # Check if this file belongs to an enabled service
+        service_id = cidr_file.stem  # filename without extension
+        if service_id not in enabled_services:
             continue
         
         with open(cidr_file) as f:
@@ -310,8 +324,13 @@ def load_nftables_sets():
                     if result.returncode == 0:
                         loaded += 1
     
-    # Also load static files
+    # Also load static files (only for enabled services)
     for static_file in LISTS_DIR.glob("*_static.txt"):
+        # Check if this file belongs to an enabled service
+        service_id = static_file.stem.replace("_static", "")
+        if service_id not in enabled_services:
+            continue
+            
         with open(static_file) as f:
             for line in f:
                 cidr = line.strip()
