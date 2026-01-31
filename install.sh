@@ -3,9 +3,13 @@
 # PinPoint - Selective VPN Routing for OpenWRT
 # Installation Script
 #
-# Usage:
-#   wget -O - https://raw.githubusercontent.com/USER/pinpoint/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/USER/pinpoint/main/install.sh | sh
+# Usage (choose one):
+#   curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
+#   wget -qO- https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
+#
+# Interactive mode (download first):
+#   curl -fsSL .../install.sh -o /tmp/install.sh && sh /tmp/install.sh
+#   wget -qO /tmp/install.sh .../install.sh && sh /tmp/install.sh
 #
 # Requirements: OpenWRT 23.05.0 or later
 #
@@ -60,11 +64,17 @@ opkg_silent() {
     opkg "$@" 2>&1 | grep -iE "error|failed|cannot|No space" || true
 }
 
-# Download file - uses curl (more common on OpenWRT)
+# Download file - tries curl first, falls back to wget
 download() {
     URL="$1"
     OUTPUT="$2"
-    curl -fsSL -o "$OUTPUT" "$URL" 2>/dev/null
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "$OUTPUT" "$URL" 2>/dev/null
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$OUTPUT" "$URL" 2>/dev/null
+    else
+        error "Neither curl nor wget found. Install one: opkg install curl"
+    fi
 }
 
 # ============================================
