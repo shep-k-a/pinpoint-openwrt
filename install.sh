@@ -1147,7 +1147,8 @@ create_singbox_config() {
       "address": ["10.0.0.1/30"],
       "mtu": 9000,
       "auto_route": false,
-      "sniff": true
+      "sniff": true,
+      "stack": "gvisor"
     }
   ],
   "outbounds": [

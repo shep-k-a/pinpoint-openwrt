@@ -982,7 +982,8 @@ def generate_singbox_config(tunnels: List[Dict], groups: List[Dict], active_outb
                 "inet4_address": "10.0.0.1/30",
                 "mtu": 9000,
                 "auto_route": False,
-                "sniff": True
+                "sniff": True,
+                "stack": "gvisor"
             },
             {
                 "type": "direct",
