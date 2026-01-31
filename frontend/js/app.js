@@ -885,6 +885,110 @@ async function testDomain() {
     }
 }
 
+// ============ Service Control ============
+let currentLogTab = 'pinpoint';
+
+async function loadServiceStatus() {
+    try {
+        const data = await api('/service/status');
+        
+        // Update PinPoint status
+        const ppStatus = document.getElementById('pinpoint-service-status');
+        if (ppStatus) {
+            const indicator = ppStatus.querySelector('.status-indicator');
+            const text = ppStatus.querySelector('.status-text');
+            if (data.pinpoint?.running) {
+                indicator.className = 'status-indicator running';
+                text.textContent = 'Работает';
+            } else {
+                indicator.className = 'status-indicator stopped';
+                text.textContent = 'Остановлен';
+            }
+        }
+        
+        // Update sing-box status
+        const sbStatus = document.getElementById('singbox-service-status');
+        if (sbStatus) {
+            const indicator = sbStatus.querySelector('.status-indicator');
+            const text = sbStatus.querySelector('.status-text');
+            if (data.singbox?.running) {
+                indicator.className = 'status-indicator running';
+                text.textContent = 'Работает';
+            } else {
+                indicator.className = 'status-indicator stopped';
+                text.textContent = 'Остановлен';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load service status:', error);
+    }
+}
+
+async function startAllServices() {
+    try {
+        showLoading('Запуск сервисов...');
+        await api('/service/start', { method: 'POST' });
+        showToast('Сервисы запущены', 'success');
+        await loadServiceStatus();
+        await refreshStatus();
+    } catch (error) {
+        showToast('Ошибка запуска: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function stopAllServices() {
+    try {
+        showLoading('Остановка сервисов...');
+        await api('/service/stop', { method: 'POST' });
+        showToast('Сервисы остановлены', 'success');
+        await loadServiceStatus();
+        await refreshStatus();
+    } catch (error) {
+        showToast('Ошибка остановки: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function restartAllServices() {
+    try {
+        showLoading('Перезапуск сервисов...');
+        await api('/service/restart', { method: 'POST' });
+        showToast('Сервисы перезапущены', 'success');
+        await loadServiceStatus();
+        await refreshStatus();
+    } catch (error) {
+        showToast('Ошибка перезапуска: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function switchLogTab(tab) {
+    currentLogTab = tab;
+    document.querySelectorAll('.log-tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.log === tab);
+    });
+    loadServiceLogs();
+}
+
+async function loadServiceLogs() {
+    const output = document.getElementById('service-logs-output');
+    if (!output) return;
+    
+    output.textContent = 'Загрузка логов...';
+    
+    try {
+        const data = await api(`/service/logs?type=${currentLogTab}&lines=100`);
+        output.textContent = data.logs || 'Логи пусты';
+        output.scrollTop = output.scrollHeight;
+    } catch (error) {
+        output.textContent = 'Ошибка загрузки логов: ' + error.message;
+    }
+}
+
 // Logs
 async function loadLogs() {
     try {
@@ -906,6 +1010,7 @@ async function loadLogs() {
 document.addEventListener('DOMContentLoaded', () => {
     refreshStatus();
     loadAutoUpdateTime();
+    loadServiceStatus();
     
     // Auto-refresh status every 10 seconds on dashboard
     setInterval(() => {

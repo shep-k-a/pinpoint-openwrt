@@ -1177,6 +1177,122 @@ async def get_stats():
     
     return stats
 
+# ============ Service Control ============
+@app.get("/api/service/status")
+async def get_service_status():
+    """Get status of PinPoint and sing-box services"""
+    result = {
+        "pinpoint": {"running": False, "pid": None},
+        "singbox": {"running": False, "pid": None}
+    }
+    
+    # Check PinPoint (Python/uvicorn process)
+    success, output = run_command(["pgrep", "-f", "uvicorn.*main:app"])
+    if success and output.strip():
+        result["pinpoint"]["running"] = True
+        result["pinpoint"]["pid"] = int(output.strip().split()[0])
+    
+    # Check sing-box
+    success, output = run_command(["pgrep", "-f", "sing-box"])
+    if success and output.strip():
+        result["singbox"]["running"] = True
+        result["singbox"]["pid"] = int(output.strip().split()[0])
+    
+    return result
+
+@app.post("/api/service/start")
+async def start_services():
+    """Start PinPoint and sing-box services"""
+    results = {"pinpoint": False, "singbox": False}
+    
+    # Start sing-box first
+    success, _ = run_command(["/etc/init.d/sing-box", "start"])
+    results["singbox"] = success
+    
+    # PinPoint should already be running (we're responding to this request)
+    results["pinpoint"] = True
+    
+    return {"status": "ok", "results": results}
+
+@app.post("/api/service/stop")
+async def stop_services():
+    """Stop sing-box service (PinPoint will keep running)"""
+    results = {"singbox": False}
+    
+    # Stop sing-box
+    success, _ = run_command(["/etc/init.d/sing-box", "stop"])
+    results["singbox"] = success
+    
+    return {"status": "ok", "results": results, "note": "PinPoint keeps running to serve UI"}
+
+@app.post("/api/service/restart")
+async def restart_services():
+    """Restart sing-box and routing"""
+    results = {"singbox": False, "routing": False}
+    
+    # Restart sing-box
+    success, _ = run_command(["/etc/init.d/sing-box", "restart"])
+    results["singbox"] = success
+    
+    # Re-apply routing
+    import time
+    time.sleep(2)
+    success, _ = run_command(["python3", "/opt/pinpoint/scripts/pinpoint-update.py", "update"])
+    results["routing"] = success
+    
+    return {"status": "ok", "results": results}
+
+@app.get("/api/service/logs")
+async def get_service_logs(type: str = "pinpoint", lines: int = 100):
+    """Get service logs"""
+    logs = ""
+    
+    if type == "pinpoint":
+        # PinPoint logs
+        log_file = Path("/var/log/pinpoint.log")
+        if log_file.exists():
+            try:
+                with open(log_file, 'r') as f:
+                    all_lines = f.readlines()
+                    logs = ''.join(all_lines[-lines:])
+            except:
+                logs = "Ошибка чтения логов"
+        else:
+            # Try logread
+            success, output = run_command(["logread", "-e", "pinpoint"])
+            if success:
+                lines_list = output.strip().split('\n')
+                logs = '\n'.join(lines_list[-lines:])
+    
+    elif type == "singbox":
+        # sing-box logs
+        log_file = Path("/var/log/sing-box.log")
+        if log_file.exists():
+            try:
+                with open(log_file, 'r') as f:
+                    all_lines = f.readlines()
+                    logs = ''.join(all_lines[-lines:])
+            except:
+                logs = "Ошибка чтения логов"
+        else:
+            success, output = run_command(["logread", "-e", "sing-box"])
+            if success:
+                lines_list = output.strip().split('\n')
+                logs = '\n'.join(lines_list[-lines:])
+    
+    elif type == "system":
+        # General system logs
+        success, output = run_command(["logread"])
+        if success:
+            lines_list = output.strip().split('\n')
+            logs = '\n'.join(lines_list[-lines:])
+    
+    # Strip ANSI color codes
+    import re
+    logs = re.sub(r'\x1b\[[0-9;]*m', '', logs)
+    
+    return {"logs": logs, "type": type}
+
 @app.get("/api/logs")
 async def get_logs(limit: int = 100):
     """Get recent DNS query logs"""

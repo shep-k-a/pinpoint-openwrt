@@ -4318,6 +4318,106 @@ footer a {
     padding: 16px;
 }
 
+/* Service Control Card */
+.service-control-card .service-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.service-control-card .status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.service-control-card .status-indicator.running {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.service-control-card .status-indicator.stopped {
+    background: var(--danger);
+}
+
+.service-control-card .status-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.service-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.service-actions .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.service-logs-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.service-logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.service-logs-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.log-tab {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.log-tab:hover {
+    background: var(--bg-tertiary);
+}
+
+.log-tab.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.service-logs-output {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    max-height: 300px;
+    overflow-y: auto;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 .setting-row {
     display: flex;
     align-items: center;

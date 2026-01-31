@@ -998,6 +998,53 @@
             <div class="settings-layout">
                 <!-- Left column -->
                 <div class="settings-column">
+                    <!-- Service Control -->
+                    <div class="settings-card service-control-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">⚡</span>
+                            <h3>Управление сервисом</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="setting-row">
+                                <span class="setting-label">PinPoint</span>
+                                <div class="service-status" id="pinpoint-service-status">
+                                    <span class="status-indicator running"></span>
+                                    <span class="status-text">Проверка...</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <span class="setting-label">sing-box</span>
+                                <div class="service-status" id="singbox-service-status">
+                                    <span class="status-indicator"></span>
+                                    <span class="status-text">Проверка...</span>
+                                </div>
+                            </div>
+                            <div class="service-actions">
+                                <button class="btn btn-success" onclick="startAllServices()">
+                                    <span>▶</span> Запустить
+                                </button>
+                                <button class="btn btn-danger" onclick="stopAllServices()">
+                                    <span>■</span> Остановить
+                                </button>
+                                <button class="btn btn-secondary" onclick="restartAllServices()">
+                                    <span>↻</span> Перезапустить
+                                </button>
+                            </div>
+                            <div class="service-logs-section">
+                                <div class="service-logs-header">
+                                    <span>Логи сервисов</span>
+                                    <button class="btn btn-sm btn-secondary" onclick="loadServiceLogs()">Обновить</button>
+                                </div>
+                                <div class="service-logs-tabs">
+                                    <button class="log-tab active" data-log="pinpoint" onclick="switchLogTab('pinpoint')">PinPoint</button>
+                                    <button class="log-tab" data-log="singbox" onclick="switchLogTab('singbox')">sing-box</button>
+                                    <button class="log-tab" data-log="system" onclick="switchLogTab('system')">Система</button>
+                                </div>
+                                <pre class="service-logs-output" id="service-logs-output">Нажмите "Обновить" для загрузки логов...</pre>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Auto Update -->
                     <div class="settings-card">
                         <div class="settings-card-header">
