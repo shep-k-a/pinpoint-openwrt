@@ -396,9 +396,63 @@ def restart_dnsmasq():
     else:
         log(f"dnsmasq restart failed: {result.stderr.decode()}")
 
+def clean_device_rules():
+    """Remove all existing device-specific rules from nftables"""
+    log("Cleaning old device rules...")
+    
+    # Get all rules with 'pinpoint: device' comment
+    result = subprocess.run(
+        ["nft", "-a", "list", "chain", "inet", "pinpoint", "prerouting"],
+        capture_output=True, text=True
+    )
+    
+    if result.returncode != 0:
+        return
+    
+    # Find and delete rules with device comments
+    import re
+    handles_to_delete = []
+    for line in result.stdout.split('\n'):
+        if 'pinpoint: device' in line:
+            # Extract handle number
+            match = re.search(r'# handle (\d+)', line)
+            if match:
+                handles_to_delete.append(match.group(1))
+    
+    # Delete rules by handle (in reverse order to avoid reordering issues)
+    for handle in reversed(handles_to_delete):
+        subprocess.run(
+            ["nft", "delete", "rule", "inet", "pinpoint", "prerouting", "handle", handle],
+            capture_output=True
+        )
+    
+    if handles_to_delete:
+        log(f"Removed {len(handles_to_delete)} old device rules")
+    
+    # Also clean up device-specific sets
+    result = subprocess.run(
+        ["nft", "list", "sets", "inet", "pinpoint"],
+        capture_output=True, text=True
+    )
+    
+    if result.returncode == 0:
+        for line in result.stdout.split('\n'):
+            if 'set device_' in line:
+                match = re.search(r'set (device_\w+)', line)
+                if match:
+                    set_name = match.group(1)
+                    subprocess.run(
+                        ["nft", "delete", "set", "inet", "pinpoint", set_name],
+                        capture_output=True
+                    )
+                    log(f"Removed old device set: {set_name}")
+
 def generate_device_rules():
     """Generate nftables rules for device-specific routing"""
     log("Generating device routing rules...")
+    
+    # First, clean all old device rules
+    clean_device_rules()
     
     if not DEVICES_FILE.exists():
         log("No devices file found, skipping device rules")
@@ -411,10 +465,7 @@ def generate_device_rules():
     enabled_devices = [d for d in devices if d.get('enabled', False)]
     
     if not enabled_devices:
-        log("No enabled devices, skipping device rules")
-        # Remove old rules if any
-        subprocess.run(["nft", "delete", "chain", "inet", "pinpoint", "device_prerouting"], 
-                       capture_output=True, stderr=subprocess.DEVNULL)
+        log("No enabled devices")
         return
     
     # Get enabled services and their domains for custom mode
