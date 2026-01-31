@@ -216,8 +216,8 @@ function get_tunnels() {
 	return { tunnels: tunnels };
 }
 
-// RPC method dispatcher
-return {
+// RPC methods object
+const methods = {
 	status: {
 		call: function() {
 			return get_status();
@@ -261,3 +261,6 @@ return {
 		}
 	}
 };
+
+// Register as 'luci.pinpoint' ubus object
+return { 'luci.pinpoint': methods };
