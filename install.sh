@@ -157,11 +157,12 @@ check_internet() {
 check_disk_space() {
     step "Checking available disk space..."
     
-    # Get available space in KB (handle large values)
-    AVAILABLE=$(df /opt 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$')
+    # Get available space in KB - try /opt first, fallback to /
+    # Use || true to prevent set -e from exiting on df failure
+    AVAILABLE=$(df /opt 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$' || true)
     
     if [ -z "$AVAILABLE" ]; then
-        AVAILABLE=$(df / | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$')
+        AVAILABLE=$(df / 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$' || true)
     fi
     
     # Default to OK if can't parse (e.g., very large flash)
