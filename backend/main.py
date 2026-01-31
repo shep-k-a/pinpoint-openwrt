@@ -1157,14 +1157,14 @@ async def get_stats():
     
     if success:
         import re
-        # Parse counters
+        # Parse counters - tunnel_ips = DNS resolved, tunnel_nets = static lists
         for line in output.split('\n'):
-            if 'dns-resolved' in line:
+            if '@tunnel_ips' in line or 'tunnel_ips' in line:
                 match = re.search(r'counter packets (\d+) bytes (\d+)', line)
                 if match:
                     stats["dns_resolved"]["packets"] = int(match.group(1))
                     stats["dns_resolved"]["bytes"] = int(match.group(2))
-            elif 'static-lists' in line:
+            elif '@tunnel_nets' in line or 'tunnel_nets' in line:
                 match = re.search(r'counter packets (\d+) bytes (\d+)', line)
                 if match:
                     stats["static_lists"]["packets"] = int(match.group(1))
@@ -1641,10 +1641,11 @@ class StatsDatabase:
                 if match:
                     packets = int(match.group(1))
                     bytes_count = int(match.group(2))
-                    if 'dns-resolved' in line:
+                    # tunnel_ips = DNS resolved IPs, tunnel_nets = static IP lists
+                    if '@tunnel_ips' in line or 'tunnel_ips' in line:
                         dns_packets = packets
                         dns_bytes = bytes_count
-                    elif 'static-lists' in line:
+                    elif '@tunnel_nets' in line or 'tunnel_nets' in line:
                         static_packets = packets
                         static_bytes = bytes_count
         
