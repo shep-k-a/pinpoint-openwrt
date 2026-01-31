@@ -471,8 +471,28 @@ install_dependencies() {
     fi
     install_package "ip-full" "iproute2 full"
     
-    # DNS
-    install_package "dnsmasq-full" "dnsmasq full" || install_package "dnsmasq" "dnsmasq"
+    # DNS - need dnsmasq-full for nftset support
+    # Must remove standard dnsmasq first as they conflict
+    step "Installing dnsmasq-full (with nftset support)..."
+    if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
+        info "dnsmasq-full already installed"
+    else
+        # Remove standard dnsmasq if present (they conflict)
+        if opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
+            opkg remove dnsmasq --force-removal-of-dependent-packages >/dev/null 2>&1 || true
+        fi
+        opkg_quiet install dnsmasq-full
+        if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
+            info "dnsmasq-full installed"
+        else
+            warn "Failed to install dnsmasq-full, trying standard dnsmasq"
+            install_package "dnsmasq" "dnsmasq"
+        fi
+    fi
+    
+    # Configure dnsmasq to read confdir
+    uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
     
     # Lua for LuCI integration
     install_package "lua" "Lua runtime"
@@ -613,8 +633,15 @@ download_files() {
     # Scripts
     step "Downloading scripts..."
     download "$GITHUB_REPO/scripts/update-subscriptions.sh" "$PINPOINT_DIR/scripts/update-subscriptions.sh" || true
+    download "$GITHUB_REPO/scripts/pinpoint-update.py" "$PINPOINT_DIR/scripts/pinpoint-update.py" || error "Failed to download pinpoint-update.py"
     chmod +x "$PINPOINT_DIR/scripts/"*.sh 2>/dev/null || true
+    chmod +x "$PINPOINT_DIR/scripts/"*.py 2>/dev/null || true
     info "Scripts downloaded"
+    
+    # Download default services database
+    step "Downloading services database..."
+    download "$GITHUB_REPO/data/services.json" "$PINPOINT_DIR/data/services.json" || warn "Failed to download services.json"
+    info "Services database downloaded"
     
     # Set permissions
     chmod 755 "$PINPOINT_DIR/backend/"*.py
@@ -1170,6 +1197,13 @@ start_service() {
         info "PinPoint is running"
     else
         warn "Service may not have started. Check: logread | grep pinpoint"
+    fi
+    
+    # Initialize routing and load services
+    step "Initializing routing..."
+    if [ -f "$PINPOINT_DIR/scripts/pinpoint-update.py" ]; then
+        python3 "$PINPOINT_DIR/scripts/pinpoint-update.py" update >/dev/null 2>&1 || true
+        info "Services and routing initialized"
     fi
 }
 
