@@ -1035,6 +1035,15 @@ table inet pinpoint {
     }
 }
 NFT
+        
+        # Add masquerade for tun1 traffic (NAT for VPN)
+        if nft list tables 2>/dev/null | grep -q "inet fw4"; then
+            nft add chain inet fw4 srcnat_tun1 2>/dev/null || true
+            nft add rule inet fw4 srcnat_tun1 meta nfproto ipv4 masquerade 2>/dev/null || true
+            nft list chain inet fw4 srcnat 2>/dev/null | grep -q "tun1" || \
+                nft insert rule inet fw4 srcnat oifname tun1 jump srcnat_tun1 2>/dev/null || true
+        fi
+        
         log "Routing initialized"
         ;;
     stop)
@@ -1173,6 +1182,19 @@ setup_firewall() {
         uci set firewall.@rule[-1].target='ACCEPT'
         uci commit firewall
         /etc/init.d/firewall reload >/dev/null 2>&1 || true
+    fi
+    
+    # Add masquerade for tun1 (VPN interface) in nftables
+    # This ensures client traffic going through VPN is properly NAT'd
+    if nft list tables 2>/dev/null | grep -q "inet fw4"; then
+        # Create srcnat chain for tun1 if not exists
+        nft add chain inet fw4 srcnat_tun1 2>/dev/null || true
+        nft add rule inet fw4 srcnat_tun1 meta nfproto ipv4 masquerade 2>/dev/null || true
+        # Add rule to jump to srcnat_tun1 for tun1 traffic
+        if ! nft list chain inet fw4 srcnat 2>/dev/null | grep -q "tun1"; then
+            nft insert rule inet fw4 srcnat oifname tun1 jump srcnat_tun1 2>/dev/null || \
+                nft add rule inet fw4 srcnat oifname tun1 masquerade 2>/dev/null || true
+        fi
     fi
     
     info "Firewall configured"
