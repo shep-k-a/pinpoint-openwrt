@@ -900,9 +900,18 @@ INITEOF
     
     info "PinPoint service created"
     
-    # Create sing-box init script (simple version)
+    # Create sing-box wrapper script (for deprecated features in 1.12+)
     step "Creating sing-box init.d service..."
     
+    cat > /usr/bin/sing-box-wrapper << 'SBWRAP'
+#!/bin/sh
+export ENABLE_DEPRECATED_TUN_ADDRESS_X=true
+export ENABLE_DEPRECATED_SPECIAL_OUTBOUNDS=true
+exec /usr/bin/sing-box "$@"
+SBWRAP
+    chmod +x /usr/bin/sing-box-wrapper
+    
+    # Create sing-box init script
     cat > /etc/init.d/sing-box << 'SBINIT'
 #!/bin/sh /etc/rc.common
 
@@ -911,10 +920,8 @@ STOP=15
 
 start() {
     echo "Starting sing-box..."
-    export ENABLE_DEPRECATED_TUN_ADDRESS_X=true
-    /usr/bin/sing-box run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
+    /usr/bin/sing-box-wrapper run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
     echo $! > /var/run/sing-box.pid
-    # Initialize pinpoint routing after sing-box starts
     sleep 3
     [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
 }
