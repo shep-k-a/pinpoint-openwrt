@@ -1145,7 +1145,7 @@ create_singbox_config() {
       "tag": "tun-in",
       "interface_name": "tun1",
       "address": ["10.0.0.1/30"],
-      "mtu": 9000,
+      "mtu": 1400,
       "auto_route": false,
       "sniff": true,
       "stack": "gvisor"

@@ -980,7 +980,7 @@ def generate_singbox_config(tunnels: List[Dict], groups: List[Dict], active_outb
                 "tag": "tun-in",
                 "interface_name": "tun1",
                 "inet4_address": "10.0.0.1/30",
-                "mtu": 9000,
+                "mtu": 1400,
                 "auto_route": False,
                 "sniff": True,
                 "stack": "gvisor"
