@@ -1878,13 +1878,13 @@ class StatsDatabase:
             # If not enough hourly data, aggregate from minutes
             if len(rows) < 5:
                 rows = conn.execute('''
-                    SELECT (timestamp / 3600) * 3600 as hour_ts,
+                    SELECT (timestamp / 3600) * 3600 as timestamp,
                            SUM(delta_bytes) as delta_bytes,
                            MAX(total_bytes) as total_bytes
                     FROM traffic_minutes
                     WHERE timestamp >= ?
-                    GROUP BY hour_ts
-                    ORDER BY hour_ts ASC
+                    GROUP BY timestamp
+                    ORDER BY timestamp ASC
                 ''', (cutoff,)).fetchall()
             return [dict(r) for r in rows]
         
@@ -1899,13 +1899,13 @@ class StatsDatabase:
         if len(rows) < 3:
             # Try aggregating from minutes by day
             rows = conn.execute('''
-                SELECT (timestamp / 86400) * 86400 as day_ts,
+                SELECT (timestamp / 86400) * 86400 as timestamp,
                        SUM(delta_bytes) as delta_bytes,
                        MAX(total_bytes) as total_bytes
                 FROM traffic_minutes
                 WHERE timestamp >= ?
-                GROUP BY day_ts
-                ORDER BY day_ts ASC
+                GROUP BY timestamp
+                ORDER BY timestamp ASC
             ''', (cutoff,)).fetchall()
         return [dict(r) for r in rows]
     
