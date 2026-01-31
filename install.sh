@@ -1042,6 +1042,11 @@ NFT
             nft add rule inet fw4 srcnat_tun1 meta nfproto ipv4 masquerade 2>/dev/null || true
             nft list chain inet fw4 srcnat 2>/dev/null | grep -q "tun1" || \
                 nft insert rule inet fw4 srcnat oifname tun1 jump srcnat_tun1 2>/dev/null || true
+            # Add forward accept rules for tun1 traffic
+            nft list chain inet fw4 forward 2>/dev/null | grep -q "iifname.*tun1" || \
+                nft insert rule inet fw4 forward iifname tun1 accept 2>/dev/null || true
+            nft list chain inet fw4 forward 2>/dev/null | grep -q "oifname.*tun1" || \
+                nft insert rule inet fw4 forward oifname tun1 accept 2>/dev/null || true
         fi
         
         log "Routing initialized"
@@ -1195,6 +1200,13 @@ setup_firewall() {
         if ! nft list chain inet fw4 srcnat 2>/dev/null | grep -q "tun1"; then
             nft insert rule inet fw4 srcnat oifname tun1 jump srcnat_tun1 2>/dev/null || \
                 nft add rule inet fw4 srcnat oifname tun1 masquerade 2>/dev/null || true
+        fi
+        # Add forward accept rules for tun1 traffic
+        if ! nft list chain inet fw4 forward 2>/dev/null | grep -q "iifname.*tun1"; then
+            nft insert rule inet fw4 forward iifname tun1 accept 2>/dev/null || true
+        fi
+        if ! nft list chain inet fw4 forward 2>/dev/null | grep -q "oifname.*tun1"; then
+            nft insert rule inet fw4 forward oifname tun1 accept 2>/dev/null || true
         fi
     fi
     
