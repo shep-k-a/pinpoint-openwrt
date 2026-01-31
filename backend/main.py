@@ -1867,7 +1867,7 @@ class StatsDatabase:
             ''', (cutoff,)).fetchall()
             return [dict(r) for r in rows]
         
-        # Up to 7 days: hourly data
+        # Up to 7 days: try hourly data first
         if minutes <= 7 * 24 * 60:
             rows = conn.execute('''
                 SELECT timestamp, delta_bytes
@@ -1875,15 +1875,38 @@ class StatsDatabase:
                 WHERE timestamp >= ?
                 ORDER BY timestamp ASC
             ''', (cutoff,)).fetchall()
+            # If not enough hourly data, aggregate from minutes
+            if len(rows) < 5:
+                rows = conn.execute('''
+                    SELECT (timestamp / 3600) * 3600 as hour_ts,
+                           SUM(delta_bytes) as delta_bytes,
+                           MAX(total_bytes) as total_bytes
+                    FROM traffic_minutes
+                    WHERE timestamp >= ?
+                    GROUP BY hour_ts
+                    ORDER BY hour_ts ASC
+                ''', (cutoff,)).fetchall()
             return [dict(r) for r in rows]
         
-        # Longer: daily data
+        # Longer: try daily data, fallback to aggregated hourly
         rows = conn.execute('''
             SELECT timestamp, delta_bytes
             FROM traffic_days
             WHERE timestamp >= ?
             ORDER BY timestamp ASC
         ''', (cutoff,)).fetchall()
+        # If not enough daily data, aggregate from hours or minutes
+        if len(rows) < 3:
+            # Try aggregating from minutes by day
+            rows = conn.execute('''
+                SELECT (timestamp / 86400) * 86400 as day_ts,
+                       SUM(delta_bytes) as delta_bytes,
+                       MAX(total_bytes) as total_bytes
+                FROM traffic_minutes
+                WHERE timestamp >= ?
+                GROUP BY day_ts
+                ORDER BY day_ts ASC
+            ''', (cutoff,)).fetchall()
         return [dict(r) for r in rows]
     
     def get_system_history(self, minutes: int = 60):
