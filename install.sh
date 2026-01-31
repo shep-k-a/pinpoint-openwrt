@@ -157,27 +157,21 @@ check_internet() {
 check_disk_space() {
     step "Checking available disk space..."
     
-    # Get available space in KB - try /opt first, fallback to /
-    # Use || true to prevent set -e from exiting on df failure
-    AVAILABLE=$(df /opt 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$' || true)
+    # Simple disk check - just verify / has space
+    # Use subshell to prevent set -e issues
+    AVAILABLE_MB=$(df / 2>/dev/null | awk 'NR==2 {printf "%.0f", $4/1024}' || echo "0")
     
-    if [ -z "$AVAILABLE" ]; then
-        AVAILABLE=$(df / 2>/dev/null | tail -1 | awk '{print $4}' | grep -E '^[0-9]+$' || true)
+    # If parsing failed or returned empty, assume OK
+    if [ -z "$AVAILABLE_MB" ] || [ "$AVAILABLE_MB" = "0" ]; then
+        # Try alternative parsing
+        AVAILABLE_MB=$(df -m / 2>/dev/null | awk 'NR==2 {print $4}' || echo "100")
     fi
     
-    # Default to OK if can't parse (e.g., very large flash)
-    if [ -z "$AVAILABLE" ]; then
-        info "Available space: OK (could not parse exact value)"
-        return 0
+    # Need at least 10MB
+    if [ "$AVAILABLE_MB" -lt 10 ] 2>/dev/null; then
+        error "Not enough disk space. Need at least 10MB, have ${AVAILABLE_MB}MB"
     fi
     
-    # Need at least 10MB (10240 KB)
-    if [ "$AVAILABLE" -lt 10240 ] 2>/dev/null; then
-        error "Not enough disk space. Need at least 10MB, have $(($AVAILABLE/1024))MB"
-    fi
-    
-    # Calculate MB safely
-    AVAILABLE_MB=$((AVAILABLE / 1024))
     info "Available space: ${AVAILABLE_MB}MB"
 }
 
