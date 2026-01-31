@@ -208,6 +208,12 @@ def generate_dnsmasq_config():
     """Generate dnsmasq nftset configuration"""
     log("Generating dnsmasq config...")
     
+    # Remove old config location if exists (migration from /etc to /tmp)
+    old_config = Path("/etc/dnsmasq.d/pinpoint.conf")
+    if old_config.exists():
+        log("Removing old config: /etc/dnsmasq.d/pinpoint.conf")
+        old_config.unlink()
+    
     # Collect all domains from enabled services
     all_domains = set()
     
