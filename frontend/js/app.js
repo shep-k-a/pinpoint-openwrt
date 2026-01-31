@@ -975,18 +975,33 @@ function switchLogTab(tab) {
 }
 
 async function loadServiceLogs() {
-    const output = document.getElementById('service-logs-output');
-    if (!output) return;
+    // Try both outputs (settings page and modal)
+    const outputs = [
+        document.getElementById('service-logs-output'),
+        document.getElementById('modal-logs-output')
+    ].filter(el => el);
     
-    output.textContent = 'Загрузка логов...';
+    outputs.forEach(el => el.textContent = 'Загрузка логов...');
     
     try {
-        const data = await api(`/service/logs?type=${currentLogTab}&lines=100`);
-        output.textContent = data.logs || 'Логи пусты';
-        output.scrollTop = output.scrollHeight;
+        const data = await api(`/service/logs?type=${currentLogTab}&lines=200`);
+        const logsText = data.logs || 'Логи пусты';
+        outputs.forEach(el => {
+            el.textContent = logsText;
+            el.scrollTop = el.scrollHeight;
+        });
     } catch (error) {
-        output.textContent = 'Ошибка загрузки логов: ' + error.message;
+        outputs.forEach(el => el.textContent = 'Ошибка загрузки логов: ' + error.message);
     }
+}
+
+function showLogsModal() {
+    document.getElementById('logs-modal').classList.add('active');
+    loadServiceLogs();
+}
+
+function closeLogsModal() {
+    document.getElementById('logs-modal').classList.remove('active');
 }
 
 // Logs
@@ -1311,6 +1326,12 @@ document.getElementById('device-modal')?.addEventListener('click', (e) => {
 document.getElementById('custom-service-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'custom-service-modal') {
         closeCustomServiceModal();
+    }
+});
+
+document.getElementById('logs-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'logs-modal') {
+        closeLogsModal();
     }
 });
 

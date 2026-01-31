@@ -144,6 +144,22 @@
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Service Control Buttons -->
+                        <div class="service-control-inline">
+                            <button class="btn-service btn-start" onclick="startAllServices()" title="Запустить">
+                                <span>▶</span>
+                            </button>
+                            <button class="btn-service btn-stop" onclick="stopAllServices()" title="Остановить">
+                                <span>■</span>
+                            </button>
+                            <button class="btn-service btn-restart" onclick="restartAllServices()" title="Перезапустить">
+                                <span>↻</span>
+                            </button>
+                            <button class="btn-service btn-logs" onclick="showLogsModal()" title="Логи">
+                                <span>≡</span>
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="card health-card-compact">
@@ -719,6 +735,25 @@
                 </div>
             </div>
         </section>
+        
+        <!-- Logs Modal -->
+        <div class="modal" id="logs-modal">
+            <div class="modal-content modal-logs">
+                <div class="modal-header">
+                    <h3>Логи сервисов</h3>
+                    <button class="modal-close" onclick="closeLogsModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="logs-tabs">
+                        <button class="log-tab active" data-log="pinpoint" onclick="switchLogTab('pinpoint')">PinPoint</button>
+                        <button class="log-tab" data-log="singbox" onclick="switchLogTab('singbox')">sing-box</button>
+                        <button class="log-tab" data-log="system" onclick="switchLogTab('system')">Система</button>
+                        <button class="btn btn-sm btn-secondary" onclick="loadServiceLogs()" style="margin-left: auto;">Обновить</button>
+                    </div>
+                    <pre class="logs-output" id="modal-logs-output">Загрузка...</pre>
+                </div>
+            </div>
+        </div>
         
         <!-- Tunnel Modal -->
         <div class="modal" id="tunnel-modal">

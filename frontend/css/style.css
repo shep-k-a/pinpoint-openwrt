@@ -4318,6 +4318,92 @@ footer a {
     padding: 16px;
 }
 
+/* Service Control Inline (Dashboard) */
+.service-control-inline {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    justify-content: center;
+}
+
+.btn-service {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-service:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-service.btn-start:hover {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+}
+
+.btn-service.btn-stop:hover {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+}
+
+.btn-service.btn-restart:hover {
+    background: var(--warning);
+    color: white;
+    border-color: var(--warning);
+}
+
+.btn-service.btn-logs:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* Logs Modal */
+.modal-logs {
+    max-width: 900px;
+    width: 95%;
+}
+
+.modal-logs .modal-body {
+    padding: 0;
+}
+
+.logs-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.logs-output {
+    background: #0d1117;
+    margin: 0;
+    padding: 16px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    height: 500px;
+    overflow-y: auto;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* Service Control Card */
 .service-control-card .service-status {
     display: flex;
