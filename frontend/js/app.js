@@ -109,10 +109,14 @@ const i18n = {
 
 // Utility functions
 function formatBytes(bytes) {
+    if (bytes === null || bytes === undefined || isNaN(bytes)) return '0 Б';
     if (bytes === 0) return '0 Б';
+    if (bytes < 0) bytes = Math.abs(bytes);
+    if (bytes < 1) return bytes.toFixed(2) + ' Б';
+    
     const k = 1024;
     const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
