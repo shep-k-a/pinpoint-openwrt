@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# Create pinpoint directories
+mkdir -p /opt/pinpoint/data
+mkdir -p /opt/pinpoint/data/lists
+mkdir -p /opt/pinpoint/scripts
+
+# Initialize services.json if not exists
+if [ ! -f /opt/pinpoint/data/services.json ]; then
+    cat > /opt/pinpoint/data/services.json << 'EOF'
+{
+  "services": [
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "icon": "▶",
+      "category": "video",
+      "enabled": false,
+      "domains": ["youtube.com", "googlevideo.com", "ytimg.com"],
+      "sources": []
+    }
+  ],
+  "categories": {
+    "video": "Video Streaming",
+    "social": "Social Networks",
+    "gaming": "Gaming"
+  }
+}
+EOF
+fi
+
+# Initialize devices.json if not exists
+if [ ! -f /opt/pinpoint/data/devices.json ]; then
+    echo '{"devices":[]}' > /opt/pinpoint/data/devices.json
+fi
+
+# Set proper permissions
+chmod 755 /opt/pinpoint/scripts/*  2>/dev/null || true
+
+exit 0

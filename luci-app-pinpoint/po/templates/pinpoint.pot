@@ -1,0 +1,135 @@
+# PinPoint LuCI translations
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "PinPoint"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "Services"
+msgstr ""
+
+msgid "Devices"
+msgstr ""
+
+msgid "PinPoint Status"
+msgstr ""
+
+msgid "VPN Active"
+msgstr ""
+
+msgid "VPN Inactive"
+msgstr ""
+
+msgid "VPN Status"
+msgstr ""
+
+msgid "Tunnel Interface"
+msgstr ""
+
+msgid "Sing-box"
+msgstr ""
+
+msgid "Running"
+msgstr ""
+
+msgid "Stopped"
+msgstr ""
+
+msgid "Enabled Services"
+msgstr ""
+
+msgid "Last Update"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "Traffic Statistics"
+msgstr ""
+
+msgid "Packets Tunneled"
+msgstr ""
+
+msgid "Data Tunneled"
+msgstr ""
+
+msgid "Networks in Set"
+msgstr ""
+
+msgid "IPs in Set"
+msgstr ""
+
+msgid "Actions"
+msgstr ""
+
+msgid "Apply Rules"
+msgstr ""
+
+msgid "Restart VPN"
+msgstr ""
+
+msgid "Rules applied successfully"
+msgstr ""
+
+msgid "Sing-box restarted"
+msgstr ""
+
+msgid "PinPoint Services"
+msgstr ""
+
+msgid "Select services to route through VPN tunnel."
+msgstr ""
+
+msgid "Service"
+msgstr ""
+
+msgid "Domains"
+msgstr ""
+
+msgid "ON"
+msgstr ""
+
+msgid "OFF"
+msgstr ""
+
+msgid "Apply Changes"
+msgstr ""
+
+msgid "Applying..."
+msgstr ""
+
+msgid "Updating routing rules..."
+msgstr ""
+
+msgid "PinPoint Devices"
+msgstr ""
+
+msgid "Configure per-device VPN routing."
+msgstr ""
+
+msgid "Device"
+msgstr ""
+
+msgid "IP Address"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Enabled"
+msgstr ""
+
+msgid "No devices configured. Add devices from the network hosts list."
+msgstr ""
+
+msgid "Updating device rules..."
+msgstr ""
+
+msgid "Device rules applied"
+msgstr ""
+
+msgid "Error: "
+msgstr ""

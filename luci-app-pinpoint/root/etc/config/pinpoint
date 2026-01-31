@@ -1,0 +1,10 @@
+config pinpoint 'main'
+	option enabled '1'
+	option tunnel_interface 'tun1'
+	option tunnel_mark '0x100'
+	option update_interval '3600'
+
+config tunnel 'default'
+	option name 'Default VPN'
+	option type 'vless'
+	option enabled '1'

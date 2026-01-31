@@ -1,0 +1,31 @@
+{
+	"luci-app-pinpoint": {
+		"description": "Grant access to PinPoint VPN routing",
+		"read": {
+			"uci": ["pinpoint"],
+			"file": {
+				"/etc/config/pinpoint": ["read"],
+				"/opt/pinpoint/data/*": ["read"],
+				"/tmp/pinpoint/*": ["read"]
+			},
+			"ubus": {
+				"luci.pinpoint": ["status", "services", "devices", "tunnels"]
+			}
+		},
+		"write": {
+			"uci": ["pinpoint"],
+			"file": {
+				"/etc/config/pinpoint": ["write"],
+				"/opt/pinpoint/data/*": ["write"]
+			},
+			"ubus": {
+				"luci.pinpoint": [
+					"set_service",
+					"set_device",
+					"apply",
+					"restart"
+				]
+			}
+		}
+	}
+}
