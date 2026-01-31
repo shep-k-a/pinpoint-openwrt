@@ -33,5 +33,29 @@
 			"type": "view",
 			"path": "pinpoint/devices"
 		}
+	},
+	"admin/vpn/pinpoint/custom": {
+		"title": "Custom",
+		"order": 40,
+		"action": {
+			"type": "view",
+			"path": "pinpoint/custom"
+		}
+	},
+	"admin/vpn/pinpoint/tunnels": {
+		"title": "Tunnels",
+		"order": 50,
+		"action": {
+			"type": "view",
+			"path": "pinpoint/tunnels"
+		}
+	},
+	"admin/vpn/pinpoint/settings": {
+		"title": "Settings",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "pinpoint/settings"
+		}
 	}
 }

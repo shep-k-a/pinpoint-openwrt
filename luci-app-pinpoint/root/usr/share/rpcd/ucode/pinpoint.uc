@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// PinPoint RPC backend for LuCI
+// PinPoint RPC backend for LuCI (Full Version)
 
 'use strict';
 
-import { readfile, writefile, popen, stat } from 'fs';
+import { readfile, writefile, popen, stat, mkdir, unlink } from 'fs';
 
 const PINPOINT_DIR = '/opt/pinpoint';
 const DATA_DIR = PINPOINT_DIR + '/data';
 const SERVICES_FILE = DATA_DIR + '/services.json';
 const DEVICES_FILE = DATA_DIR + '/devices.json';
+const CUSTOM_FILE = DATA_DIR + '/custom_services.json';
+const SUBSCRIPTIONS_FILE = DATA_DIR + '/subscriptions.json';
+const SETTINGS_FILE = DATA_DIR + '/settings.json';
 
 // Helper: read JSON file
 function read_json(path) {
@@ -199,6 +202,7 @@ function get_tunnels() {
 	// Read sing-box config
 	let config = read_json('/etc/sing-box/config.json');
 	let tunnels = [];
+	let active = '';
 	
 	if (config && config.outbounds) {
 		for (let ob in config.outbounds) {
@@ -211,9 +215,300 @@ function get_tunnels() {
 				});
 			}
 		}
+		// First tunnel is active by default
+		if (length(tunnels) > 0) {
+			active = tunnels[0].tag;
+		}
 	}
 	
-	return { tunnels: tunnels };
+	// Get subscriptions
+	let subs = read_json(SUBSCRIPTIONS_FILE);
+	
+	return { 
+		tunnels: tunnels, 
+		active: active,
+		subscriptions: subs ? subs.subscriptions || [] : []
+	};
+}
+
+// Add VPN subscription
+function add_subscription(params) {
+	let url = params.url;
+	let name = params.name || 'Subscription';
+	
+	if (!url) {
+		return { error: 'URL is required' };
+	}
+	
+	let subs = read_json(SUBSCRIPTIONS_FILE);
+	if (!subs) {
+		subs = { subscriptions: [] };
+	}
+	
+	// Generate unique ID
+	let id = 'sub_' + time();
+	
+	push(subs.subscriptions, {
+		id: id,
+		name: name,
+		url: url,
+		nodes: 0,
+		updated: null
+	});
+	
+	write_json(SUBSCRIPTIONS_FILE, subs);
+	
+	return { success: true, id: id };
+}
+
+// Update all subscriptions
+function update_subscriptions() {
+	let subs = read_json(SUBSCRIPTIONS_FILE);
+	if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
+		return { error: 'No subscriptions configured' };
+	}
+	
+	// For each subscription, download and parse
+	for (let i = 0; i < length(subs.subscriptions); i++) {
+		let sub = subs.subscriptions[i];
+		let content = run_cmd('curl -s "' + sub.url + '" 2>/dev/null');
+		
+		if (content) {
+			// Try to count nodes (basic parsing)
+			let nodes = length(split(content, '\n'));
+			subs.subscriptions[i].nodes = nodes;
+			subs.subscriptions[i].updated = run_cmd('date "+%Y-%m-%d %H:%M"');
+			
+			// Save raw content
+			writefile(DATA_DIR + '/subscription_' + sub.id + '.txt', content);
+		}
+	}
+	
+	write_json(SUBSCRIPTIONS_FILE, subs);
+	
+	return { success: true };
+}
+
+// Set active tunnel
+function set_active_tunnel(params) {
+	let tag = params.tag;
+	if (!tag) {
+		return { error: 'Tunnel tag required' };
+	}
+	
+	// Update sing-box config to use this outbound
+	let config = read_json('/etc/sing-box/config.json');
+	if (!config) {
+		return { error: 'Cannot read sing-box config' };
+	}
+	
+	// Find and move outbound to top (make it default)
+	let found = false;
+	if (config.outbounds) {
+		for (let i = 0; i < length(config.outbounds); i++) {
+			if (config.outbounds[i].tag == tag) {
+				let ob = splice(config.outbounds, i, 1)[0];
+				unshift(config.outbounds, ob);
+				found = true;
+				break;
+			}
+		}
+	}
+	
+	if (!found) {
+		return { error: 'Tunnel not found' };
+	}
+	
+	write_json('/etc/sing-box/config.json', config);
+	run_cmd('/etc/init.d/sing-box restart 2>&1');
+	
+	return { success: true, active: tag };
+}
+
+// Health check for tunnels
+function health_check() {
+	let tunnels = get_tunnels().tunnels;
+	let results = [];
+	
+	for (let t in tunnels) {
+		// Ping test via tunnel
+		let latency = null;
+		let test_out = run_cmd('ping -c 1 -W 3 8.8.8.8 2>/dev/null');
+		
+		if (test_out) {
+			let m = match(test_out, /time=([0-9.]+)/);
+			if (m) {
+				latency = int(+m[1]);
+			}
+		}
+		
+		push(results, {
+			tag: t.tag,
+			latency: latency,
+			status: latency ? 'online' : 'timeout'
+		});
+	}
+	
+	return { results: results };
+}
+
+// ===== CUSTOM SERVICES =====
+
+// Get custom services
+function get_custom_services() {
+	let data = read_json(CUSTOM_FILE);
+	if (!data) {
+		return { services: [] };
+	}
+	return { services: data.services || [] };
+}
+
+// Add custom service
+function add_custom_service(params) {
+	let name = params.name;
+	let domains = params.domains || [];
+	let ips = params.ips || [];
+	
+	if (!name) {
+		return { error: 'Name is required' };
+	}
+	
+	let data = read_json(CUSTOM_FILE);
+	if (!data) {
+		data = { services: [] };
+	}
+	
+	let id = 'custom_' + time();
+	
+	push(data.services, {
+		id: id,
+		name: name,
+		domains: domains,
+		ips: ips,
+		enabled: true
+	});
+	
+	write_json(CUSTOM_FILE, data);
+	
+	return { success: true, id: id };
+}
+
+// Delete custom service
+function delete_custom_service(params) {
+	let id = params.id;
+	
+	if (!id) {
+		return { error: 'ID is required' };
+	}
+	
+	let data = read_json(CUSTOM_FILE);
+	if (!data || !data.services) {
+		return { error: 'No custom services' };
+	}
+	
+	let newServices = [];
+	for (let s in data.services) {
+		if (s.id != id) {
+			push(newServices, s);
+		}
+	}
+	
+	data.services = newServices;
+	write_json(CUSTOM_FILE, data);
+	
+	return { success: true };
+}
+
+// Toggle custom service
+function toggle_custom_service(params) {
+	let id = params.id;
+	let enabled = params.enabled;
+	
+	if (!id) {
+		return { error: 'ID is required' };
+	}
+	
+	let data = read_json(CUSTOM_FILE);
+	if (!data || !data.services) {
+		return { error: 'No custom services' };
+	}
+	
+	for (let i = 0; i < length(data.services); i++) {
+		if (data.services[i].id == id) {
+			data.services[i].enabled = !!enabled;
+			break;
+		}
+	}
+	
+	write_json(CUSTOM_FILE, data);
+	
+	return { success: true };
+}
+
+// ===== SETTINGS =====
+
+// Get settings
+function get_settings() {
+	let settings = read_json(SETTINGS_FILE);
+	if (!settings) {
+		settings = {
+			auto_update: true,
+			update_interval: 21600,
+			tunnel_interface: 'tun1',
+			tunnel_mark: '0x100'
+		};
+	}
+	return settings;
+}
+
+// Save settings
+function save_settings(params) {
+	let settings = params.settings || params;
+	
+	let current = get_settings();
+	
+	if (settings.auto_update != null) current.auto_update = settings.auto_update;
+	if (settings.update_interval != null) current.update_interval = settings.update_interval;
+	if (settings.tunnel_interface != null) current.tunnel_interface = settings.tunnel_interface;
+	if (settings.tunnel_mark != null) current.tunnel_mark = settings.tunnel_mark;
+	
+	write_json(SETTINGS_FILE, current);
+	
+	return { success: true };
+}
+
+// Get system info
+function get_system_info() {
+	let singbox_ver = run_cmd('sing-box version 2>/dev/null | head -1');
+	
+	let mem_info = run_cmd('free | grep Mem');
+	let mem_total = 0, mem_used = 0;
+	if (mem_info) {
+		let parts = split(trim(mem_info), /\s+/);
+		if (length(parts) >= 3) {
+			mem_total = +parts[1] * 1024;
+			mem_used = +parts[2] * 1024;
+		}
+	}
+	
+	// Count services
+	let services_data = read_json(SERVICES_FILE);
+	let services_count = 0;
+	if (services_data && services_data.services) {
+		services_count = length(services_data.services);
+	}
+	
+	// Last update
+	let status = read_json(DATA_DIR + '/status.json');
+	
+	return {
+		version: '1.0.0 Lite',
+		singbox_version: singbox_ver ? trim(singbox_ver) : null,
+		memory_total: mem_total,
+		memory_used: mem_used,
+		services_count: services_count,
+		last_update: status ? status.last_update : null
+	};
 }
 
 // RPC methods object
@@ -258,6 +553,67 @@ const methods = {
 	tunnels: {
 		call: function() {
 			return get_tunnels();
+		}
+	},
+	add_subscription: {
+		args: { url: 'url', name: 'name' },
+		call: function(req) {
+			return add_subscription(req.args);
+		}
+	},
+	update_subscriptions: {
+		call: function() {
+			return update_subscriptions();
+		}
+	},
+	set_active_tunnel: {
+		args: { tag: 'tag' },
+		call: function(req) {
+			return set_active_tunnel(req.args);
+		}
+	},
+	health_check: {
+		call: function() {
+			return health_check();
+		}
+	},
+	custom_services: {
+		call: function() {
+			return get_custom_services();
+		}
+	},
+	add_custom_service: {
+		args: { name: 'name', domains: [], ips: [] },
+		call: function(req) {
+			return add_custom_service(req.args);
+		}
+	},
+	delete_custom_service: {
+		args: { id: 'id' },
+		call: function(req) {
+			return delete_custom_service(req.args);
+		}
+	},
+	toggle_custom_service: {
+		args: { id: 'id', enabled: true },
+		call: function(req) {
+			return toggle_custom_service(req.args);
+		}
+	},
+	get_settings: {
+		call: function() {
+			return get_settings();
+		}
+	},
+	save_settings: {
+		args: { settings: {} },
+		call: function(req) {
+			return save_settings(req.args);
+		}
+	},
+	system_info: {
+		call: function() {
+			return get_system_info();
 		}
 	}
 };

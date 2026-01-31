@@ -6,24 +6,42 @@
 			"file": {
 				"/etc/config/pinpoint": ["read"],
 				"/opt/pinpoint/data/*": ["read"],
-				"/tmp/pinpoint/*": ["read"]
+				"/tmp/pinpoint/*": ["read"],
+				"/etc/sing-box/*": ["read"]
 			},
 			"ubus": {
-				"luci.pinpoint": ["status", "services", "devices", "tunnels"]
+				"luci.pinpoint": [
+					"status",
+					"services",
+					"devices",
+					"tunnels",
+					"custom_services",
+					"get_settings",
+					"system_info",
+					"health_check"
+				]
 			}
 		},
 		"write": {
 			"uci": ["pinpoint"],
 			"file": {
 				"/etc/config/pinpoint": ["write"],
-				"/opt/pinpoint/data/*": ["write"]
+				"/opt/pinpoint/data/*": ["write"],
+				"/etc/sing-box/*": ["write"]
 			},
 			"ubus": {
 				"luci.pinpoint": [
 					"set_service",
 					"set_device",
 					"apply",
-					"restart"
+					"restart",
+					"add_subscription",
+					"update_subscriptions",
+					"set_active_tunnel",
+					"add_custom_service",
+					"delete_custom_service",
+					"toggle_custom_service",
+					"save_settings"
 				]
 			}
 		}
