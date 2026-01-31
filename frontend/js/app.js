@@ -282,7 +282,12 @@ window.addEventListener('hashchange', () => {
 // Dashboard
 async function refreshStatus() {
     try {
-        const status = await api('/status');
+        // Fetch status and traffic history in parallel
+        // Use large period (1 year) to get all available history for cumulative total
+        const [status, trafficData] = await Promise.all([
+            api('/status'),
+            api('/traffic/history?minutes=525600').catch(() => ({ history: [] }))
+        ]);
         
         // Update status indicator
         const indicator = document.getElementById('status-indicator');
@@ -302,11 +307,25 @@ async function refreshStatus() {
             message.textContent = i18n.status.tunnel_down;
         }
         
-        // Update stats
+        // Calculate total bytes from history (consistent with chart data)
+        let totalBytes = 0;
+        if (trafficData.history && trafficData.history.length > 0) {
+            for (let i = 0; i < trafficData.history.length; i++) {
+                const item = trafficData.history[i];
+                let value = item.delta_bytes;
+                if (value === undefined && i > 0) {
+                    const prev = trafficData.history[i - 1];
+                    value = Math.max(0, item.total_bytes - prev.total_bytes);
+                }
+                totalBytes += (value || 0);
+            }
+        }
+        
+        // Update stats - use history total for bytes (consistent with chart)
         document.getElementById('stat-packets').textContent = 
             formatNumber(status.stats.packets_tunneled);
         document.getElementById('stat-bytes').textContent = 
-            formatBytes(status.stats.bytes_tunneled);
+            formatBytes(totalBytes);
         document.getElementById('stat-networks').textContent = 
             formatNumber(status.stats.static_networks);
         document.getElementById('stat-ips').textContent = 
@@ -2087,17 +2106,35 @@ async function loadTrafficChart(period = '24h') {
         if (data.history && data.history.length > 0) {
             for (let i = 0; i < data.history.length; i++) {
                 const item = data.history[i];
-                const d = new Date(item.timestamp * 1000);
                 
-                // Format label based on period
-                if (period === '24h') {
-                    labels.push(d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
-                } else if (period === '7d') {
-                    labels.push(d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + 
-                               d.toLocaleTimeString('ru-RU', { hour: '2-digit' }) + 'ч');
-                } else {
-                    labels.push(d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }));
+                // Handle timestamp - could be seconds or key string
+                let timestamp = item.timestamp;
+                if (typeof timestamp === 'string') {
+                    // Try parsing as number first
+                    timestamp = parseInt(timestamp, 10);
                 }
+                
+                let label = '';
+                if (timestamp && !isNaN(timestamp) && timestamp > 0) {
+                    const d = new Date(timestamp * 1000);
+                    if (!isNaN(d.getTime())) {
+                        // Format label based on period
+                        if (period === '24h') {
+                            label = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                        } else if (period === '7d') {
+                            label = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + 
+                                   d.toLocaleTimeString('ru-RU', { hour: '2-digit' }) + 'ч';
+                        } else {
+                            label = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+                        }
+                    }
+                }
+                
+                // Fallback if date is invalid
+                if (!label) {
+                    label = `#${i + 1}`;
+                }
+                labels.push(label);
                 
                 // Always use delta_bytes (traffic per period), fallback to calculating delta
                 let value = item.delta_bytes;
@@ -2121,6 +2158,14 @@ async function loadTrafficChart(period = '24h') {
         }
         
         console.log('Chart labels:', labels.length, 'bytes:', bytes.length);
+        
+        // Calculate and display total for the period
+        const totalBytes = bytes.reduce((sum, val) => sum + val, 0);
+        const periodTotalEl = document.getElementById('traffic-period-total');
+        if (periodTotalEl) {
+            const periodLabels = { '24h': 'за 24ч', '7d': 'за 7д', '30d': 'за 30д' };
+            periodTotalEl.textContent = `${formatBytes(totalBytes)} ${periodLabels[period] || ''}`;
+        }
         
         if (trafficChart) {
             trafficChart.destroy();

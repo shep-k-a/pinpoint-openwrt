@@ -3644,6 +3644,21 @@ footer a {
     color: #e8eaed;
 }
 
+.chart-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.chart-period-total {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
 .chart-period-selector {
     display: flex;
     gap: 4px;
