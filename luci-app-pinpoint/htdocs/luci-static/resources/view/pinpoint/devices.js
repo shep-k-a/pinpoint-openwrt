@@ -3,6 +3,7 @@
 'require rpc';
 'require ui';
 'require dom';
+'require fs';
 
 var callGetDevices = rpc.declare({
 	object: 'luci.pinpoint',
@@ -14,7 +15,10 @@ var callSetDevice = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_device',
 	params: ['id', 'enabled', 'mode', 'name'],
-	expect: { }
+	expect: { success: false },
+	filter: function(data, args, extra) {
+		return data;
+	}
 });
 
 var callAddDevice = rpc.declare({
@@ -365,23 +369,25 @@ return view.extend({
 								that.textContent = '...';
 								showLoading(newState ? 'Включение...' : 'Выключение...');
 								
-								callSetDevice(deviceId, newState, null, null)
+								// Use fs.exec to call ubus directly for reliable boolean handling
+								var cmd = 'ubus call luci.pinpoint set_device \'{"id":"' + deviceId + '","enabled":' + (newState ? 'true' : 'false') + '}\'';
+								
+								fs.exec('/bin/sh', ['-c', cmd])
+									.then(function() {
+										return callApply();
+									})
 									.then(function() {
 										that.setAttribute('data-enabled', newState ? '1' : '0');
 										that.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										that.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-										return callApply();
-									})
-									.then(function() {
 										hideLoading();
 										that.disabled = false;
-										ui.addNotification(null, E('p', newState ? 'Устройство включено' : 'Устройство выключено'), 'success');
 									})
 									.catch(function(e) {
 										hideLoading();
 										that.disabled = false;
 										that.textContent = currentState ? 'ВКЛ' : 'ВЫКЛ';
-										ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+										ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
 									});
 							};
 							
