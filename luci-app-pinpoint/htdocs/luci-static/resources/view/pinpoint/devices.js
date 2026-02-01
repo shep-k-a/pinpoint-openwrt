@@ -3,7 +3,6 @@
 'require rpc';
 'require ui';
 'require dom';
-'require fs';
 
 var callGetDevices = rpc.declare({
 	object: 'luci.pinpoint',
@@ -11,14 +10,18 @@ var callGetDevices = rpc.declare({
 	expect: { }
 });
 
-var callSetDevice = rpc.declare({
+var callEnableDevice = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_device',
-	params: ['id', 'enabled', 'mode', 'name'],
-	expect: { success: false },
-	filter: function(data, args, extra) {
-		return data;
-	}
+	params: ['id', 'enabled'],
+	expect: { success: false }
+});
+
+var callSetDeviceMode = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'set_device',
+	params: ['id', 'enabled', 'mode'],
+	expect: { success: false }
 });
 
 var callAddDevice = rpc.declare({
@@ -322,21 +325,17 @@ return view.extend({
 									var newMode = s.value;
 									s.disabled = true;
 									
-									return withLoading('Сохранение...', 
-										callSetDevice(deviceId, null, newMode, null)
-											.then(function(result) {
-												if (result.error) {
-													ui.addNotification(null, E('p', result.error), 'danger');
-												} else {
-													return callApply();
-												}
+								return withLoading('Сохранение...', 
+										callSetDeviceMode(deviceId, null, newMode)
+											.then(function() {
+												return callApply();
 											})
-									).then(function() {
-										s.disabled = false;
-									}).catch(function(e) {
-										s.disabled = false;
-										ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
-									});
+								).then(function() {
+									s.disabled = false;
+								}).catch(function(e) {
+									s.disabled = false;
+									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+								});
 								})
 							}, [
 								E('option', { 'value': 'default' }, modeLabels['default']),
@@ -369,10 +368,7 @@ return view.extend({
 								that.textContent = '...';
 								showLoading(newState ? 'Включение...' : 'Выключение...');
 								
-								// Use fs.exec to call ubus directly for reliable boolean handling
-								var cmd = 'ubus call luci.pinpoint set_device \'{"id":"' + deviceId + '","enabled":' + (newState ? 'true' : 'false') + '}\'';
-								
-								fs.exec('/bin/sh', ['-c', cmd])
+								callEnableDevice(deviceId, newState)
 									.then(function() {
 										return callApply();
 									})
