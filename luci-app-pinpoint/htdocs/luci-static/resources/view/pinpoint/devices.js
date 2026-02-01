@@ -305,40 +305,44 @@ return view.extend({
 					]),
 					E('div', { 'class': 'td' }, device.ip || '-'),
 					E('div', { 'class': 'td' }, [
-						E('select', {
-							'class': 'cbi-input-select',
-							'data-device': device.id,
-							'style': 'min-width: 160px;',
-							'change': ui.createHandlerFn(self, function(ev) {
-								if (isLoading) return;
-								
-								var sel = ev.target;
-								var deviceId = sel.getAttribute('data-device');
-								var newMode = sel.value;
-								sel.disabled = true;
-								
-								return withLoading('Сохранение...', 
-									callSetDevice(deviceId, null, newMode, null)
-										.then(function(result) {
-											if (result.error) {
-												ui.addNotification(null, E('p', result.error), 'danger');
-											} else {
-												return callApply();
-											}
-										})
-								).then(function() {
-									sel.disabled = false;
-								}).catch(function(e) {
-									sel.disabled = false;
-									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
-								});
-							})
-						}, [
-							E('option', { 'value': 'default', 'selected': device.mode === 'default' }, modeLabels['default']),
-							E('option', { 'value': 'vpn_all', 'selected': device.mode === 'vpn_all' }, modeLabels['vpn_all']),
-							E('option', { 'value': 'direct_all', 'selected': device.mode === 'direct_all' }, modeLabels['direct_all']),
-							E('option', { 'value': 'custom', 'selected': device.mode === 'custom' }, modeLabels['custom'])
-						])
+						(function() {
+							var sel = E('select', {
+								'class': 'cbi-input-select',
+								'data-device': device.id,
+								'style': 'min-width: 160px;',
+								'change': ui.createHandlerFn(self, function(ev) {
+									if (isLoading) return;
+									
+									var s = ev.target;
+									var deviceId = s.getAttribute('data-device');
+									var newMode = s.value;
+									s.disabled = true;
+									
+									return withLoading('Сохранение...', 
+										callSetDevice(deviceId, null, newMode, null)
+											.then(function(result) {
+												if (result.error) {
+													ui.addNotification(null, E('p', result.error), 'danger');
+												} else {
+													return callApply();
+												}
+											})
+									).then(function() {
+										s.disabled = false;
+									}).catch(function(e) {
+										s.disabled = false;
+										ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+									});
+								})
+							}, [
+								E('option', { 'value': 'default' }, modeLabels['default']),
+								E('option', { 'value': 'vpn_all' }, modeLabels['vpn_all']),
+								E('option', { 'value': 'direct_all' }, modeLabels['direct_all']),
+								E('option', { 'value': 'custom' }, modeLabels['custom'])
+							]);
+							sel.value = device.mode || 'default';
+							return sel;
+						})()
 					]),
 					E('div', { 'class': 'td' }, [
 						E('button', {
