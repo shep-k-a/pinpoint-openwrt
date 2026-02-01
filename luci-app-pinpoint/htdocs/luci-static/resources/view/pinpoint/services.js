@@ -84,7 +84,7 @@ return view.extend({
 		]);
 	},
 
-	filterServices: function(searchText, category) {
+	filterServices: function(searchText, category, onlyEnabled) {
 		var rows = document.querySelectorAll('[data-service-id]');
 		var sections = document.querySelectorAll('.cbi-section[data-category]');
 		
@@ -92,14 +92,17 @@ return view.extend({
 			var serviceId = row.getAttribute('data-service-id');
 			var serviceName = row.querySelector('strong') ? row.querySelector('strong').textContent.toLowerCase() : '';
 			var serviceCat = row.getAttribute('data-category');
+			var btn = row.querySelector('button[data-enabled]');
+			var isEnabled = btn && btn.getAttribute('data-enabled') === '1';
 			
 			var matchesSearch = !searchText || 
 				serviceName.indexOf(searchText.toLowerCase()) !== -1 ||
 				serviceId.indexOf(searchText.toLowerCase()) !== -1;
 			
 			var matchesCat = !category || category === 'all' || serviceCat === category;
+			var matchesEnabled = !onlyEnabled || isEnabled;
 			
-			row.style.display = (matchesSearch && matchesCat) ? '' : 'none';
+			row.style.display = (matchesSearch && matchesCat && matchesEnabled) ? '' : 'none';
 		});
 		
 		// Hide empty sections
@@ -107,6 +110,35 @@ return view.extend({
 			var cat = section.getAttribute('data-category');
 			var visibleRows = section.querySelectorAll('[data-service-id]:not([style*="display: none"])');
 			section.style.display = visibleRows.length > 0 ? '' : 'none';
+		});
+	},
+	
+	updateStats: function() {
+		var allBtns = document.querySelectorAll('button[data-enabled]');
+		var enabledCount = 0;
+		allBtns.forEach(function(btn) {
+			if (btn.getAttribute('data-enabled') === '1') enabledCount++;
+		});
+		
+		var statsEl = document.getElementById('services-stats');
+		if (statsEl) {
+			statsEl.textContent = 'Всего: ' + allBtns.length + ', Включено: ' + enabledCount;
+		}
+		
+		// Update category headers
+		var sections = document.querySelectorAll('.cbi-section[data-category]');
+		sections.forEach(function(section) {
+			var cat = section.getAttribute('data-category');
+			var catBtns = section.querySelectorAll('button[data-enabled]');
+			var catEnabled = 0;
+			catBtns.forEach(function(btn) {
+				if (btn.getAttribute('data-enabled') === '1') catEnabled++;
+			});
+			var header = section.querySelector('h3');
+			if (header) {
+				var catName = header.textContent.split(' (')[0];
+				header.textContent = catName + ' (' + catEnabled + '/' + catBtns.length + ')';
+			}
 		});
 	},
 
@@ -150,8 +182,10 @@ return view.extend({
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, 'Сервисы PinPoint'),
-			E('p', {}, 'Выберите сервисы для маршрутизации через VPN туннель. ' +
-				'Всего: ' + services.length + ', Включено: ' + enabledCount)
+			E('p', {}, [
+				'Выберите сервисы для маршрутизации через VPN туннель. ',
+				E('span', { 'id': 'services-stats' }, 'Всего: ' + services.length + ', Включено: ' + enabledCount)
+			])
 		]);
 		
 		// Search and filter bar
@@ -173,26 +207,39 @@ return view.extend({
 			return E('option', { 'value': c }, categories[c] + ' (' + (byCategory[c] ? byCategory[c].length : 0) + ')');
 		})));
 		
+		// Checkbox for enabled only
+		var enabledOnlyCheckbox = E('input', {
+			'type': 'checkbox',
+			'id': 'enabled-only-filter'
+		});
+		
+		var enabledOnlyLabel = E('label', { 'style': 'display: flex; align-items: center; gap: 5px; cursor: pointer;' }, [
+			enabledOnlyCheckbox,
+			'Только включенные'
+		]);
+		
 		// Add event listeners after elements are created
 		var filterTimeout = null;
+		
+		function applyFilters() {
+			var search = document.getElementById('service-search').value;
+			var cat = document.getElementById('category-filter').value;
+			var onlyEnabled = document.getElementById('enabled-only-filter').checked;
+			self.filterServices(search, cat, onlyEnabled);
+		}
+		
 		searchInput.addEventListener('input', function(ev) {
 			clearTimeout(filterTimeout);
-			filterTimeout = setTimeout(function() {
-				var search = ev.target.value;
-				var cat = document.getElementById('category-filter').value;
-				self.filterServices(search, cat);
-			}, 150);
+			filterTimeout = setTimeout(applyFilters, 150);
 		});
 		
-		categorySelect.addEventListener('change', function(ev) {
-			var cat = ev.target.value;
-			var search = document.getElementById('service-search').value;
-			self.filterServices(search, cat);
-		});
+		categorySelect.addEventListener('change', applyFilters);
+		enabledOnlyCheckbox.addEventListener('change', applyFilters);
 		
-		var filterBar = E('div', { 'style': 'display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;' }, [
+		var filterBar = E('div', { 'style': 'display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;' }, [
 			searchInput,
-			categorySelect
+			categorySelect,
+			enabledOnlyLabel
 		]);
 		
 		view.appendChild(filterBar);
@@ -215,18 +262,19 @@ return view.extend({
 						}
 					});
 					if (promises.length > 0) {
-						return withLoading('Включение ' + promises.length + ' сервисов...', 
-							Promise.all(promises).then(function() {
-								btns.forEach(function(btn) {
-									btn.setAttribute('data-enabled', '1');
-									btn.textContent = 'ВКЛ';
-									btn.className = 'btn cbi-button cbi-button-positive';
-								});
-								return callApply();
-							})
-						).then(function() {
-							ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'success');
-						});
+							return withLoading('Включение ' + promises.length + ' сервисов...', 
+								Promise.all(promises).then(function() {
+									btns.forEach(function(btn) {
+										btn.setAttribute('data-enabled', '1');
+										btn.textContent = 'ВКЛ';
+										btn.className = 'btn cbi-button cbi-button-positive';
+									});
+									return callApply();
+								})
+							).then(function() {
+								self.updateStats();
+								ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'success');
+							});
 					}
 				})
 			}, 'Включить видимые'),
@@ -246,18 +294,19 @@ return view.extend({
 						}
 					});
 					if (promises.length > 0) {
-						return withLoading('Выключение ' + promises.length + ' сервисов...', 
-							Promise.all(promises).then(function() {
-								btns.forEach(function(btn) {
-									btn.setAttribute('data-enabled', '0');
-									btn.textContent = 'ВЫКЛ';
-									btn.className = 'btn cbi-button cbi-button-neutral';
-								});
-								return callApply();
-							})
-						).then(function() {
-							ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'success');
-						});
+							return withLoading('Выключение ' + promises.length + ' сервисов...', 
+								Promise.all(promises).then(function() {
+									btns.forEach(function(btn) {
+										btn.setAttribute('data-enabled', '0');
+										btn.textContent = 'ВЫКЛ';
+										btn.className = 'btn cbi-button cbi-button-neutral';
+									});
+									return callApply();
+								})
+							).then(function() {
+								self.updateStats();
+								ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'success');
+							});
 					}
 				})
 			}, 'Выключить видимые')
@@ -354,6 +403,7 @@ return view.extend({
 									})
 								).then(function() {
 									btn.disabled = false;
+									self.updateStats();
 								}).catch(function(e) {
 									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 									btn.disabled = false;
