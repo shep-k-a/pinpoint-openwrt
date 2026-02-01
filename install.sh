@@ -987,29 +987,48 @@ SBWRAP
 
 START=95
 STOP=15
+USE_PROCD=1
 
-start() {
-    echo "Starting sing-box..."
-    /usr/bin/sing-box-wrapper run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
-    echo $! > /var/run/sing-box.pid
-    sleep 3
+setup_routing() {
+    # Wait for tun1 to come up
+    for i in 1 2 3 4 5; do
+        ip link show tun1 >/dev/null 2>&1 && break
+        sleep 1
+    done
+    
+    # Setup policy routing
+    ip rule del fwmark 0x1 lookup 100 2>/dev/null
+    ip rule add fwmark 0x1 lookup 100 priority 100
+    ip route flush table 100 2>/dev/null
+    ip route add default dev tun1 table 100
+    
+    # Add fw4 masquerade for tun1
+    nft insert rule inet fw4 srcnat oifname "tun1" masquerade 2>/dev/null
+    nft insert rule inet fw4 forward iifname "br-lan" oifname "tun1" accept 2>/dev/null
+    nft insert rule inet fw4 forward iifname "tun1" accept 2>/dev/null
+    nft insert rule inet fw4 forward oifname "tun1" accept 2>/dev/null
+    
+    # Run pinpoint-init if exists
     [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+    
+    logger -t sing-box "Policy routing configured"
 }
 
-stop() {
-    echo "Stopping sing-box..."
+start_service() {
+    procd_open_instance
+    procd_set_param command /usr/bin/sing-box run -c /etc/sing-box/config.json
+    procd_set_param env ENABLE_DEPRECATED_TUN_ADDRESS_X=true ENABLE_DEPRECATED_SPECIAL_OUTBOUNDS=true
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+    
+    # Setup routing after short delay
+    ( sleep 3 && setup_routing ) &
+}
+
+stop_service() {
     [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh stop
-    if [ -f /var/run/sing-box.pid ]; then
-        kill $(cat /var/run/sing-box.pid) 2>/dev/null
-        rm -f /var/run/sing-box.pid
-    fi
-    killall sing-box 2>/dev/null || true
-}
-
-restart() {
-    stop
-    sleep 1
-    start
 }
 SBINIT
 
@@ -1033,7 +1052,7 @@ create_routing_scripts() {
 #!/bin/sh
 # PinPoint - Policy Routing Initialization Script
 
-MARK=0x100
+MARK=0x1
 TABLE_ID=100
 TUN_IFACE="tun1"
 
@@ -1068,13 +1087,13 @@ table inet pinpoint {
     
     chain prerouting {
         type filter hook prerouting priority mangle - 1; policy accept;
-        ip daddr @tunnel_ips meta mark set 0x100 counter
-        ip daddr @tunnel_nets meta mark set 0x100 counter
+        ip daddr @tunnel_ips meta mark set 0x1 counter
+        ip daddr @tunnel_nets meta mark set 0x1 counter
     }
     chain output {
         type route hook output priority mangle - 1; policy accept;
-        ip daddr @tunnel_ips meta mark set 0x100 counter
-        ip daddr @tunnel_nets meta mark set 0x100 counter
+        ip daddr @tunnel_ips meta mark set 0x1 counter
+        ip daddr @tunnel_nets meta mark set 0x1 counter
     }
 }
 NFT
@@ -1150,14 +1169,29 @@ HOTPLUGNET
 #!/bin/sh
 # Reinitialize pinpoint routing on interface changes
 
-[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "sing_box" ] && {
-    logger -t pinpoint "sing_box interface up, checking routing..."
-    sleep 1
-    if ! ip route show table pinpoint 2>/dev/null | grep -q "default"; then
-        logger -t pinpoint "Route missing, reinitializing..."
-        /opt/pinpoint/scripts/pinpoint-init.sh start
-    fi
-}
+[ "$ACTION" = "ifup" ] || exit 0
+
+# Restore routing when wan or any interface comes up
+case "$INTERFACE" in
+    wan|wan6|sing_box)
+        logger -t pinpoint "$INTERFACE up, checking routing..."
+        sleep 2
+        
+        # Ensure ip rule exists
+        ip rule show 2>/dev/null | grep -q "fwmark 0x1 lookup 100" || {
+            ip rule add fwmark 0x1 lookup 100 priority 100 2>/dev/null
+            logger -t pinpoint "Added fwmark rule"
+        }
+        
+        # Ensure table 100 has default route to tun1
+        if ip link show tun1 >/dev/null 2>&1; then
+            ip route show table 100 2>/dev/null | grep -q "default" || {
+                ip route add default dev tun1 table 100 2>/dev/null
+                logger -t pinpoint "Added default route to table 100"
+            }
+        fi
+        ;;
+esac
 HOTPLUGIFACE
 
     chmod +x /etc/hotplug.d/iface/99-pinpoint
@@ -1515,26 +1549,48 @@ SBCFG
 
 START=95
 STOP=15
+USE_PROCD=1
 
-start() {
-    echo "Starting sing-box..."
-    /usr/bin/sing-box run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
-    echo $! > /var/run/sing-box.pid
+setup_routing() {
+    # Wait for tun1 to come up
+    for i in 1 2 3 4 5; do
+        ip link show tun1 >/dev/null 2>&1 && break
+        sleep 1
+    done
+    
+    # Setup policy routing
+    ip rule del fwmark 0x1 lookup 100 2>/dev/null
+    ip rule add fwmark 0x1 lookup 100 priority 100
+    ip route flush table 100 2>/dev/null
+    ip route add default dev tun1 table 100
+    
+    # Add fw4 masquerade for tun1
+    nft insert rule inet fw4 srcnat oifname "tun1" masquerade 2>/dev/null
+    nft insert rule inet fw4 forward iifname "br-lan" oifname "tun1" accept 2>/dev/null
+    nft insert rule inet fw4 forward iifname "tun1" accept 2>/dev/null
+    nft insert rule inet fw4 forward oifname "tun1" accept 2>/dev/null
+    
+    # Run pinpoint-init if exists
+    [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+    
+    logger -t sing-box "Policy routing configured"
 }
 
-stop() {
-    echo "Stopping sing-box..."
-    if [ -f /var/run/sing-box.pid ]; then
-        kill $(cat /var/run/sing-box.pid) 2>/dev/null
-        rm -f /var/run/sing-box.pid
-    fi
-    killall sing-box 2>/dev/null || true
+start_service() {
+    procd_open_instance
+    procd_set_param command /usr/bin/sing-box run -c /etc/sing-box/config.json
+    procd_set_param env ENABLE_DEPRECATED_TUN_ADDRESS_X=true ENABLE_DEPRECATED_SPECIAL_OUTBOUNDS=true
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+    
+    # Setup routing after short delay
+    ( sleep 3 && setup_routing ) &
 }
 
-restart() {
-    stop
-    sleep 1
-    start
+stop_service() {
+    [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh stop
 }
 SBINIT
     chmod +x /etc/init.d/sing-box
