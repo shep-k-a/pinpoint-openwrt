@@ -7,6 +7,8 @@
 				"/etc/config/pinpoint": ["read"],
 				"/opt/pinpoint/data/*": ["read"],
 				"/tmp/pinpoint/*": ["read"],
+				"/tmp/dhcp.leases": ["read"],
+				"/proc/net/arp": ["read"],
 				"/etc/sing-box/*": ["read"]
 			},
 			"ubus": {
@@ -18,7 +20,10 @@
 					"custom_services",
 					"get_settings",
 					"system_info",
-					"health_check"
+					"health_check",
+					"get_logs",
+					"network_hosts",
+					"test_domain"
 				]
 			}
 		},
@@ -41,7 +46,14 @@
 					"add_custom_service",
 					"delete_custom_service",
 					"toggle_custom_service",
-					"save_settings"
+					"save_settings",
+					"import_link",
+					"import_batch",
+					"delete_subscription",
+					"edit_subscription",
+					"delete_tunnel",
+					"add_device",
+					"delete_device"
 				]
 			}
 		}

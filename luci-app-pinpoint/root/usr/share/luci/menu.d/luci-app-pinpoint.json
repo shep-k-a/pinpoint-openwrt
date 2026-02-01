@@ -18,6 +18,14 @@
 			"path": "pinpoint/status"
 		}
 	},
+	"admin/vpn/pinpoint/tunnels": {
+		"title": "Tunnels",
+		"order": 15,
+		"action": {
+			"type": "view",
+			"path": "pinpoint/tunnels"
+		}
+	},
 	"admin/vpn/pinpoint/services": {
 		"title": "Services",
 		"order": 20,
@@ -42,12 +50,12 @@
 			"path": "pinpoint/custom"
 		}
 	},
-	"admin/vpn/pinpoint/tunnels": {
-		"title": "Tunnels",
+	"admin/vpn/pinpoint/logs": {
+		"title": "Logs & Tools",
 		"order": 50,
 		"action": {
 			"type": "view",
-			"path": "pinpoint/tunnels"
+			"path": "pinpoint/logs"
 		}
 	},
 	"admin/vpn/pinpoint/settings": {

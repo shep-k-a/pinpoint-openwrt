@@ -67,7 +67,7 @@ return view.extend({
 				E('div', { 'class': 'table' }, [
 					E('div', { 'class': 'tr' }, [
 						E('div', { 'class': 'td left', 'style': 'width: 200px;' }, _('PinPoint Version')),
-						E('div', { 'class': 'td' }, sysinfo.version || '1.0.0 Lite')
+						E('div', { 'class': 'td' }, sysinfo.version || '1.0.0')
 					]),
 					E('div', { 'class': 'tr' }, [
 						E('div', { 'class': 'td left' }, _('Sing-box Version')),
