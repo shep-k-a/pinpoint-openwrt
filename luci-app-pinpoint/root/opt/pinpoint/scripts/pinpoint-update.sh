@@ -74,11 +74,25 @@ generate_dnsmasq() {
 # Auto-generated - do not edit manually
 HEADER
     
-    # Extract domains from services.json
-    if [ -f "$SERVICES_FILE" ]; then
-        grep -o '"domains"[[:space:]]*:[[:space:]]*\[[^]]*\]' "$SERVICES_FILE" | \
-        grep -o '"[a-zA-Z0-9.-]*\.[a-zA-Z]*"' | \
-        tr -d '"' | sort -u | while read -r domain; do
+    # Extract domains from ENABLED services only
+    if [ -f "$SERVICES_FILE" ] && command -v jsonfilter >/dev/null 2>&1; then
+        # Use jsonfilter if available (proper JSON parsing)
+        jsonfilter -i "$SERVICES_FILE" -e '@.services[@.enabled=true].domains[*]' 2>/dev/null | \
+        sort -u | while read -r domain; do
+            [ -n "$domain" ] && echo "nftset=/$domain/4#inet#pinpoint#tunnel_ips"
+        done >> "$DNSMASQ_CONF"
+    elif [ -f "$SERVICES_FILE" ]; then
+        # Fallback: awk-based parsing for enabled services
+        awk '
+            /"enabled"[[:space:]]*:[[:space:]]*true/ { enabled=1 }
+            /"enabled"[[:space:]]*:[[:space:]]*false/ { enabled=0 }
+            enabled && /"domains"/ { in_domains=1 }
+            in_domains && /\]/ { in_domains=0 }
+            in_domains && /"[a-zA-Z0-9.-]+\.[a-zA-Z]+"/ {
+                gsub(/.*"([^"]+)".*/, "\\1")
+                if ($0 ~ /\./) print $0
+            }
+        ' "$SERVICES_FILE" | sort -u | while read -r domain; do
             [ -n "$domain" ] && echo "nftset=/$domain/4#inet#pinpoint#tunnel_ips"
         done >> "$DNSMASQ_CONF"
     fi
