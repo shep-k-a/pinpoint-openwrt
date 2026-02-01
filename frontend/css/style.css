@@ -527,6 +527,12 @@ header h1 {
     animation: none;
 }
 
+.status-indicator.stopped {
+    background: #f59e0b;
+    box-shadow: 0 0 4px #f59e0b;
+    animation: none;
+}
+
 @keyframes pulse-green {
     0%, 100% {
         box-shadow: 0 0 4px var(--success);

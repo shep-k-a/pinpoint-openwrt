@@ -76,6 +76,7 @@ const i18n = {
     status: {
         running: 'Туннель активен, трафик маршрутизируется',
         vpn_disabled: 'VPN выключен, трафик идёт напрямую',
+        vpn_stopped: 'VPN остановлен',
         tunnel_down: 'Туннель недоступен',
         error: 'Ошибка подключения к API'
     },
@@ -301,8 +302,12 @@ async function refreshStatus() {
             // tun1 up but VPN disabled
             indicator.className = 'status-indicator disabled';
             message.textContent = i18n.status.vpn_disabled;
+        } else if (status.status === 'stopped' || !status.vpn_configured) {
+            // VPN intentionally stopped or not configured
+            indicator.className = 'status-indicator stopped';
+            message.textContent = i18n.status.vpn_stopped;
         } else {
-            // Tunnel down
+            // Tunnel down - actual error
             indicator.className = 'status-indicator error';
             message.textContent = i18n.status.tunnel_down;
         }
