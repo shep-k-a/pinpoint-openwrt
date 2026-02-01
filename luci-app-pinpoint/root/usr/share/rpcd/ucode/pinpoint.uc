@@ -329,7 +329,7 @@ function update_subscriptions() {
 	// For each subscription, download and parse
 	for (let i = 0; i < length(subs.subscriptions); i++) {
 		let sub = subs.subscriptions[i];
-		let content = run_cmd('wget -q -O - --timeout=30 "' + sub.url + '" 2>/dev/null');
+		let content = run_cmd('curl -fsSL --connect-timeout 30 "' + sub.url + '" 2>/dev/null');
 		
 		if (!content || trim(content) == '') {
 			continue;
