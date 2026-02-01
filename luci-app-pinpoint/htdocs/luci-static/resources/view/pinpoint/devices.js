@@ -44,11 +44,37 @@ var callApply = rpc.declare({
 });
 
 var modeLabels = {
-	'default': 'Global Settings',
-	'vpn_all': 'All Traffic → VPN',
-	'direct_all': 'All Traffic → Direct',
-	'custom': 'Custom Services'
+	'default': 'Глобальные настройки',
+	'vpn_all': 'Весь трафик → VPN',
+	'direct_all': 'Весь трафик → Напрямую',
+	'custom': 'Выбранные сервисы'
 };
+
+// Global loading state
+var isLoading = false;
+
+function showLoading(message) {
+	isLoading = true;
+	ui.showModal(message || 'Загрузка...', [
+		E('p', { 'class': 'spinning' }, message || 'Пожалуйста, подождите...')
+	]);
+}
+
+function hideLoading() {
+	isLoading = false;
+	ui.hideModal();
+}
+
+function withLoading(message, promise) {
+	showLoading(message);
+	return promise.then(function(result) {
+		hideLoading();
+		return result;
+	}).catch(function(e) {
+		hideLoading();
+		throw e;
+	});
+}
 
 return view.extend({
 	load: function() {
@@ -60,18 +86,18 @@ return view.extend({
 		var self = this;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
-			E('h2', {}, _('PinPoint Devices')),
-			E('p', {}, _('Configure per-device VPN routing. Add devices from network or manually.'))
+			E('h2', {}, 'Устройства PinPoint'),
+			E('p', {}, 'Настройте маршрутизацию VPN для каждого устройства.')
 		]);
 		
 		// ===== ADD DEVICE SECTION =====
-		view.appendChild(E('h3', {}, _('Add Device')));
+		view.appendChild(E('h3', {}, 'Добавить устройство'));
 		
 		var addSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' }, [
 				E('div', { 'style': 'display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;' }, [
 					E('div', {}, [
-						E('label', { 'style': 'display: block; font-size: 12px; color: #666; margin-bottom: 4px;' }, _('IP Address')),
+						E('label', { 'style': 'display: block; font-size: 12px; color: #888; margin-bottom: 4px;' }, 'IP-адрес'),
 						E('input', {
 							'type': 'text',
 							'id': 'add-device-ip',
@@ -81,7 +107,7 @@ return view.extend({
 						})
 					]),
 					E('div', {}, [
-						E('label', { 'style': 'display: block; font-size: 12px; color: #666; margin-bottom: 4px;' }, _('MAC Address')),
+						E('label', { 'style': 'display: block; font-size: 12px; color: #888; margin-bottom: 4px;' }, 'MAC-адрес'),
 						E('input', {
 							'type': 'text',
 							'id': 'add-device-mac',
@@ -91,18 +117,18 @@ return view.extend({
 						})
 					]),
 					E('div', {}, [
-						E('label', { 'style': 'display: block; font-size: 12px; color: #666; margin-bottom: 4px;' }, _('Name')),
+						E('label', { 'style': 'display: block; font-size: 12px; color: #888; margin-bottom: 4px;' }, 'Название'),
 						E('input', {
 							'type': 'text',
 							'id': 'add-device-name',
 							'class': 'cbi-input-text',
-							'placeholder': _('Device name'),
+							'placeholder': 'Мой телефон',
 							'style': 'width: 150px;'
 						})
 					]),
 					E('div', {}, [
-						E('label', { 'style': 'display: block; font-size: 12px; color: #666; margin-bottom: 4px;' }, _('Mode')),
-						E('select', { 'id': 'add-device-mode', 'class': 'cbi-input-select', 'style': 'width: 150px;' }, [
+						E('label', { 'style': 'display: block; font-size: 12px; color: #888; margin-bottom: 4px;' }, 'Режим'),
+						E('select', { 'id': 'add-device-mode', 'class': 'cbi-input-select', 'style': 'width: 180px;' }, [
 							E('option', { 'value': 'default' }, modeLabels['default']),
 							E('option', { 'value': 'vpn_all' }, modeLabels['vpn_all']),
 							E('option', { 'value': 'direct_all' }, modeLabels['direct_all']),
@@ -113,47 +139,52 @@ return view.extend({
 						'class': 'btn cbi-button cbi-button-add',
 						'style': 'height: 34px;',
 						'click': ui.createHandlerFn(self, function() {
+							if (isLoading) return;
+							
 							var ip = document.getElementById('add-device-ip').value.trim();
 							var mac = document.getElementById('add-device-mac').value.trim();
 							var name = document.getElementById('add-device-name').value.trim();
 							var mode = document.getElementById('add-device-mode').value;
 							
 							if (!ip && !mac) {
-								ui.addNotification(null, E('p', _('Enter IP or MAC address')), 'warning');
+								ui.addNotification(null, E('p', 'Введите IP или MAC адрес'), 'warning');
 								return;
 							}
 							
-							return callAddDevice(ip || null, mac || null, name || null, mode).then(function(result) {
-								if (result.success) {
-									ui.addNotification(null, E('p', _('Device added')), 'success');
-									window.location.reload();
-								} else {
-									ui.addNotification(null, E('p', result.error || _('Failed to add device')), 'danger');
-								}
-							});
+							return withLoading('Добавление устройства...', 
+								callAddDevice(ip || null, mac || null, name || null, mode)
+									.then(function(result) {
+										if (result.success) {
+											return callApply().then(function() {
+												ui.addNotification(null, E('p', 'Устройство добавлено'), 'success');
+												window.location.reload();
+											});
+										} else {
+											ui.addNotification(null, E('p', result.error || 'Ошибка добавления'), 'danger');
+										}
+									})
+							);
 						})
-					}, _('Add'))
+					}, 'Добавить')
 				]),
 				E('div', { 'style': 'margin-top: 15px;' }, [
 					E('button', {
 						'class': 'btn cbi-button cbi-button-action',
 						'click': ui.createHandlerFn(self, function() {
-							ui.showModal(_('Discovering...'), [
-								E('p', { 'class': 'spinning' }, _('Scanning network for devices...'))
-							]);
+							if (isLoading) return;
+							
+							showLoading('Поиск устройств в сети...');
 							
 							return callNetworkHosts().then(function(result) {
-								ui.hideModal();
+								hideLoading();
 								
 								if (!result.hosts || result.hosts.length === 0) {
-									ui.addNotification(null, E('p', _('No devices found on network')), 'info');
+									ui.addNotification(null, E('p', 'Устройства не найдены'), 'info');
 									return;
 								}
 								
-								// Show modal with discovered hosts
 								var hostsList = E('div', { 'style': 'max-height: 400px; overflow-y: auto;' });
 								
-								// Get existing device IPs/MACs
 								var existingIps = {};
 								var existingMacs = {};
 								devices.forEach(function(d) {
@@ -165,7 +196,7 @@ return view.extend({
 									var isExisting = existingIps[host.ip] || existingMacs[(host.mac || '').toLowerCase()];
 									
 									hostsList.appendChild(E('div', { 
-										'style': 'display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #eee;' + 
+										'style': 'display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #333;' + 
 											(isExisting ? ' opacity: 0.5;' : '')
 									}, [
 										E('input', {
@@ -178,13 +209,13 @@ return view.extend({
 										E('div', { 'style': 'flex: 1;' }, [
 											E('strong', {}, host.name || host.ip),
 											E('br'),
-											E('small', { 'style': 'color: #666;' }, host.ip + (host.mac ? ' (' + host.mac + ')' : ''))
+											E('small', { 'style': 'color: #888;' }, host.ip + (host.mac ? ' (' + host.mac + ')' : ''))
 										]),
-										isExisting ? E('span', { 'style': 'color: #22c55e; font-size: 12px;' }, _('Already added')) : null
+										isExisting ? E('span', { 'style': 'color: #22c55e; font-size: 12px;' }, 'Уже добавлено') : null
 									]));
 								});
 								
-								ui.showModal(_('Network Devices') + ' (' + result.hosts.length + ')', [
+								ui.showModal('Устройства в сети (' + result.hosts.length + ')', [
 									hostsList,
 									E('div', { 'style': 'margin-top: 15px; display: flex; gap: 10px;' }, [
 										E('button', {
@@ -192,9 +223,12 @@ return view.extend({
 											'click': function() {
 												var checkboxes = hostsList.querySelectorAll('input[type="checkbox"]:checked');
 												if (checkboxes.length === 0) {
-													ui.addNotification(null, E('p', _('Select at least one device')), 'warning');
+													ui.addNotification(null, E('p', 'Выберите хотя бы одно устройство'), 'warning');
 													return;
 												}
+												
+												ui.hideModal();
+												showLoading('Добавление ' + checkboxes.length + ' устройств...');
 												
 												var promises = [];
 												checkboxes.forEach(function(cb) {
@@ -207,24 +241,29 @@ return view.extend({
 												});
 												
 												Promise.all(promises).then(function() {
-													ui.hideModal();
-													ui.addNotification(null, E('p', _('Added ') + promises.length + _(' device(s)')), 'success');
+													return callApply();
+												}).then(function() {
+													hideLoading();
+													ui.addNotification(null, E('p', 'Добавлено ' + promises.length + ' устройств'), 'success');
 													window.location.reload();
+												}).catch(function(e) {
+													hideLoading();
+													ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 												});
 											}
-										}, _('Add Selected')),
+										}, 'Добавить выбранные'),
 										E('button', {
 											'class': 'btn cbi-button',
 											'click': function() { ui.hideModal(); }
-										}, _('Cancel'))
+										}, 'Отмена')
 									])
 								]);
 							}).catch(function(e) {
-								ui.hideModal();
-								ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+								hideLoading();
+								ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 							});
 						})
-					}, _('Discover Network Devices'))
+					}, 'Найти устройства в сети')
 				])
 			])
 		]);
@@ -232,7 +271,7 @@ return view.extend({
 		view.appendChild(addSection);
 		
 		// ===== DEVICES LIST =====
-		view.appendChild(E('h3', {}, _('Configured Devices') + ' (' + devices.length + ')'));
+		view.appendChild(E('h3', {}, 'Настроенные устройства (' + devices.length + ')'));
 		
 		var devicesSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' })
@@ -240,17 +279,17 @@ return view.extend({
 		
 		if (devices.length === 0) {
 			devicesSection.querySelector('.cbi-section-node').appendChild(
-				E('p', { 'style': 'text-align: center; padding: 20px; color: #666;' }, 
-					_('No devices configured. Add devices manually or discover from network.'))
+				E('p', { 'style': 'text-align: center; padding: 20px; color: #888;' }, 
+					'Нет настроенных устройств. Добавьте вручную или найдите в сети.')
 			);
 		} else {
 			var table = E('div', { 'class': 'table cbi-section-table' }, [
 				E('div', { 'class': 'tr table-titles' }, [
-					E('div', { 'class': 'th' }, _('Device')),
-					E('div', { 'class': 'th' }, _('IP Address')),
-					E('div', { 'class': 'th' }, _('Mode')),
-					E('div', { 'class': 'th', 'style': 'width:100px' }, _('Enabled')),
-					E('div', { 'class': 'th', 'style': 'width:80px' }, _('Actions'))
+					E('div', { 'class': 'th' }, 'Устройство'),
+					E('div', { 'class': 'th' }, 'IP-адрес'),
+					E('div', { 'class': 'th' }, 'Режим'),
+					E('div', { 'class': 'th', 'style': 'width:100px' }, 'Включено'),
+					E('div', { 'class': 'th', 'style': 'width:80px' }, 'Действия')
 				])
 			]);
 			
@@ -262,28 +301,37 @@ return view.extend({
 					E('div', { 'class': 'td' }, [
 						E('strong', {}, device.name || device.id),
 						device.mac ? E('br') : null,
-						device.mac ? E('small', { 'style': 'color: #666' }, device.mac) : null
+						device.mac ? E('small', { 'style': 'color: #888' }, device.mac) : null
 					]),
 					E('div', { 'class': 'td' }, device.ip || '-'),
 					E('div', { 'class': 'td' }, [
 						E('select', {
 							'class': 'cbi-input-select',
 							'data-device': device.id,
+							'style': 'min-width: 160px;',
 							'change': ui.createHandlerFn(self, function(ev) {
+								if (isLoading) return;
+								
 								var sel = ev.target;
 								var deviceId = sel.getAttribute('data-device');
 								var newMode = sel.value;
+								sel.disabled = true;
 								
-							return callSetDevice(deviceId, null, newMode, null).then(function(result) {
-								if (!result.success && result.error) {
-									ui.addNotification(null, E('p', result.error), 'danger');
-								} else {
-									// Apply changes to update nftables rules
-									return callApply();
-								}
-							}).catch(function(e) {
-								ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
-							});
+								return withLoading('Сохранение...', 
+									callSetDevice(deviceId, null, newMode, null)
+										.then(function(result) {
+											if (result.error) {
+												ui.addNotification(null, E('p', result.error), 'danger');
+											} else {
+												return callApply();
+											}
+										})
+								).then(function() {
+									sel.disabled = false;
+								}).catch(function(e) {
+									sel.disabled = false;
+									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+								});
 							})
 						}, [
 							E('option', { 'value': 'default', 'selected': device.mode === 'default' }, modeLabels['default']),
@@ -299,53 +347,67 @@ return view.extend({
 							'data-enabled': device.enabled ? '1' : '0',
 							'style': 'min-width: 80px',
 							'click': ui.createHandlerFn(self, function(ev) {
+								if (isLoading) return;
+								
 								var btn = ev.target;
 								var deviceId = btn.getAttribute('data-device');
 								var currentState = btn.getAttribute('data-enabled') === '1';
 								var newState = !currentState;
 								
 								btn.disabled = true;
+								var origText = btn.textContent;
 								btn.textContent = '...';
 								
-							return callSetDevice(deviceId, newState, null, null).then(function(result) {
-								if (result.success) {
-									btn.setAttribute('data-enabled', newState ? '1' : '0');
-									btn.textContent = newState ? _('ON') : _('OFF');
-									btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-									// Apply changes to update nftables rules
-									return callApply();
-								} else if (result.error) {
-									ui.addNotification(null, E('p', result.error), 'danger');
-									btn.textContent = currentState ? _('ON') : _('OFF');
-								}
-							}).then(function() {
-								btn.disabled = false;
-							}).catch(function(e) {
-									ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+								return withLoading(newState ? 'Включение...' : 'Выключение...', 
+									callSetDevice(deviceId, newState, null, null)
+										.then(function(result) {
+											if (result.success) {
+												btn.setAttribute('data-enabled', newState ? '1' : '0');
+												btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
+												btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+												return callApply();
+											} else {
+												btn.textContent = origText;
+												if (result.error) {
+													ui.addNotification(null, E('p', result.error), 'danger');
+												}
+											}
+										})
+								).then(function() {
 									btn.disabled = false;
-									btn.textContent = currentState ? _('ON') : _('OFF');
+								}).catch(function(e) {
+									btn.disabled = false;
+									btn.textContent = origText;
+									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 								});
 							})
-						}, device.enabled ? _('ON') : _('OFF'))
+						}, device.enabled ? 'ВКЛ' : 'ВЫКЛ')
 					]),
 					E('div', { 'class': 'td' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
-							'title': _('Delete'),
+							'title': 'Удалить',
 							'data-device': device.id,
 							'click': ui.createHandlerFn(self, function(ev) {
-								var deviceId = ev.target.getAttribute('data-device');
-								if (!confirm(_('Delete this device?'))) return;
+								if (isLoading) return;
 								
-								return callDeleteDevice(deviceId).then(function(result) {
-									if (result.success) {
-										var row = document.querySelector('[data-device-id="' + deviceId + '"]');
-										if (row) row.remove();
-										ui.addNotification(null, E('p', _('Device deleted')), 'success');
-									} else {
-										ui.addNotification(null, E('p', result.error || _('Delete failed')), 'danger');
-									}
-								});
+								var deviceId = ev.target.getAttribute('data-device');
+								if (!confirm('Удалить это устройство?')) return;
+								
+								return withLoading('Удаление...', 
+									callDeleteDevice(deviceId)
+										.then(function(result) {
+											if (result.success) {
+												return callApply().then(function() {
+													var row = document.querySelector('[data-device-id="' + deviceId + '"]');
+													if (row) row.remove();
+													ui.addNotification(null, E('p', 'Устройство удалено'), 'success');
+												});
+											} else {
+												ui.addNotification(null, E('p', result.error || 'Ошибка удаления'), 'danger');
+											}
+										})
+								);
 							})
 						}, '✕')
 					])
@@ -358,26 +420,6 @@ return view.extend({
 		}
 		
 		view.appendChild(devicesSection);
-		
-		// ===== APPLY BUTTON =====
-		view.appendChild(E('div', { 'class': 'cbi-page-actions' }, [
-			E('button', {
-				'class': 'btn cbi-button cbi-button-apply',
-				'click': ui.createHandlerFn(this, function() {
-					ui.showModal(_('Applying...'), [
-						E('p', { 'class': 'spinning' }, _('Updating device rules...'))
-					]);
-					
-					return callApply().then(function() {
-						ui.hideModal();
-						ui.addNotification(null, E('p', _('Device rules applied')), 'success');
-					}).catch(function(e) {
-						ui.hideModal();
-						ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
-					});
-				})
-			}, _('Apply Changes'))
-		]));
 		
 		return view;
 	},

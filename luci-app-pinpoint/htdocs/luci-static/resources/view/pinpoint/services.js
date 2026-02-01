@@ -48,6 +48,32 @@ var callSetServiceRoute = rpc.declare({
 	expect: { }
 });
 
+// Global loading state
+var isLoading = false;
+
+function showLoading(message) {
+	isLoading = true;
+	ui.showModal(message || 'Загрузка...', [
+		E('p', { 'class': 'spinning' }, message || 'Пожалуйста, подождите...')
+	]);
+}
+
+function hideLoading() {
+	isLoading = false;
+	ui.hideModal();
+}
+
+function withLoading(message, promise) {
+	showLoading(message);
+	return promise.then(function(result) {
+		hideLoading();
+		return result;
+	}).catch(function(e) {
+		hideLoading();
+		throw e;
+	});
+}
+
 return view.extend({
 	load: function() {
 		return Promise.all([
@@ -176,22 +202,30 @@ return view.extend({
 			E('button', {
 				'class': 'btn cbi-button cbi-button-action',
 				'click': ui.createHandlerFn(self, function() {
+					if (isLoading) return;
+					
 					var visible = document.querySelectorAll('[data-service-id]:not([style*="display: none"])');
 					var promises = [];
+					var btns = [];
 					visible.forEach(function(row) {
 						var btn = row.querySelector('button[data-service]');
 						if (btn && btn.getAttribute('data-enabled') !== '1') {
 							promises.push(callSetService(btn.getAttribute('data-service'), true));
-							btn.setAttribute('data-enabled', '1');
-							btn.textContent = 'ВКЛ';
-							btn.className = 'btn cbi-button cbi-button-positive';
+							btns.push(btn);
 						}
 					});
 					if (promises.length > 0) {
-						Promise.all(promises).then(function() {
-							return callApply();
-						}).then(function() {
-							ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'info');
+						return withLoading('Включение ' + promises.length + ' сервисов...', 
+							Promise.all(promises).then(function() {
+								btns.forEach(function(btn) {
+									btn.setAttribute('data-enabled', '1');
+									btn.textContent = 'ВКЛ';
+									btn.className = 'btn cbi-button cbi-button-positive';
+								});
+								return callApply();
+							})
+						).then(function() {
+							ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'success');
 						});
 					}
 				})
@@ -199,22 +233,30 @@ return view.extend({
 			E('button', {
 				'class': 'btn cbi-button cbi-button-neutral',
 				'click': ui.createHandlerFn(self, function() {
+					if (isLoading) return;
+					
 					var visible = document.querySelectorAll('[data-service-id]:not([style*="display: none"])');
 					var promises = [];
+					var btns = [];
 					visible.forEach(function(row) {
 						var btn = row.querySelector('button[data-service]');
 						if (btn && btn.getAttribute('data-enabled') === '1') {
 							promises.push(callSetService(btn.getAttribute('data-service'), false));
-							btn.setAttribute('data-enabled', '0');
-							btn.textContent = 'ВЫКЛ';
-							btn.className = 'btn cbi-button cbi-button-neutral';
+							btns.push(btn);
 						}
 					});
 					if (promises.length > 0) {
-						Promise.all(promises).then(function() {
-							return callApply();
-						}).then(function() {
-							ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'info');
+						return withLoading('Выключение ' + promises.length + ' сервисов...', 
+							Promise.all(promises).then(function() {
+								btns.forEach(function(btn) {
+									btn.setAttribute('data-enabled', '0');
+									btn.textContent = 'ВЫКЛ';
+									btn.className = 'btn cbi-button cbi-button-neutral';
+								});
+								return callApply();
+							})
+						).then(function() {
+							ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'success');
 						});
 					}
 				})
@@ -290,28 +332,32 @@ return view.extend({
 							'data-enabled': service.enabled ? '1' : '0',
 							'style': 'min-width: 60px',
 							'click': ui.createHandlerFn(self, function(ev) {
+								if (isLoading) return;
+								
 								var btn = ev.target;
 								var serviceId = btn.getAttribute('data-service');
 								var currentState = btn.getAttribute('data-enabled') === '1';
 								var newState = !currentState;
 								
 								btn.disabled = true;
+								var origText = btn.textContent;
 								btn.textContent = '...';
 								
-								return callSetService(serviceId, newState).then(function(result) {
-									if (result.success) {
-										btn.setAttribute('data-enabled', newState ? '1' : '0');
-										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
-										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-										// Apply changes to update dnsmasq config
-										return callApply();
-									}
-								}).then(function() {
+								return withLoading(newState ? 'Включение...' : 'Выключение...', 
+									callSetService(serviceId, newState).then(function(result) {
+										if (result.success) {
+											btn.setAttribute('data-enabled', newState ? '1' : '0');
+											btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
+											btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+											return callApply();
+										}
+									})
+								).then(function() {
 									btn.disabled = false;
 								}).catch(function(e) {
 									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 									btn.disabled = false;
-									btn.textContent = currentState ? 'ВКЛ' : 'ВЫКЛ';
+									btn.textContent = origText;
 								});
 							})
 						}, service.enabled ? 'ВКЛ' : 'ВЫКЛ')
