@@ -208,7 +208,43 @@ generate_device_rules() {
                         nft add rule inet pinpoint prerouting ip saddr "$ip" return comment "\"pinpoint: device $id direct_all\""
                         ;;
                     custom)
-                        log "  Device $id: custom mode"
+                        # Get selected services for this device
+                        local device_services=$(jsonfilter -i "$DEVICES_FILE" -e "@.devices[$idx].services[*]" 2>/dev/null)
+                        local svc_count=$(echo "$device_services" | wc -w)
+                        log "  Device $id ($ip): custom mode ($svc_count services)"
+                        
+                        if [ -n "$device_services" ] && [ -f "$SERVICES_FILE" ]; then
+                            # Create device-specific nft set
+                            local set_name="dev_${idx}_ips"
+                            nft add set inet pinpoint "$set_name" '{ type ipv4_addr; flags interval; }' 2>/dev/null
+                            
+                            # Collect domains for this device's services
+                            local device_domains=""
+                            for svc_id in $device_services; do
+                                # Find service and get its domains
+                                local svc_idx=0
+                                local all_svc_ids=$(jsonfilter -i "$SERVICES_FILE" -e '@.services[*].id' 2>/dev/null)
+                                for sid in $all_svc_ids; do
+                                    if [ "$sid" = "$svc_id" ]; then
+                                        local domains=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$svc_idx].domains[*]" 2>/dev/null)
+                                        device_domains="$device_domains $domains"
+                                        break
+                                    fi
+                                    svc_idx=$((svc_idx + 1))
+                                done
+                            done
+                            
+                            # Add dnsmasq config for device-specific domains
+                            if [ -n "$device_domains" ] && dnsmasq --help 2>&1 | grep -q nftset; then
+                                log "    Adding dnsmasq entries for device domains"
+                                for domain in $device_domains; do
+                                    [ -n "$domain" ] && echo "nftset=/$domain/4#inet#pinpoint#$set_name" >> "$DNSMASQ_CONF"
+                                done
+                            fi
+                            
+                            # Add rule: traffic from this IP to device set -> VPN
+                            nft add rule inet pinpoint prerouting ip saddr "$ip" ip daddr "@$set_name" meta mark set 0x1 counter comment "\"pinpoint: device $id custom\""
+                        fi
                         ;;
                 esac
             fi

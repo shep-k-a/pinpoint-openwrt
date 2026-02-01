@@ -50,6 +50,19 @@ var callApply = rpc.declare({
 	expect: { }
 });
 
+var callGetServices = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'services',
+	expect: { }
+});
+
+var callSetDeviceServices = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'set_device_services',
+	params: ['id', 'services'],
+	expect: { success: false }
+});
+
 var modeLabels = {
 	'default': 'Глобальные настройки',
 	'vpn_all': 'Весь трафик → VPN',
@@ -85,12 +98,96 @@ function withLoading(message, promise) {
 
 return view.extend({
 	load: function() {
-		return callGetDevices();
+		return Promise.all([
+			callGetDevices(),
+			callGetServices()
+		]);
 	},
 
 	render: function(data) {
-		var devices = data.devices || [];
+		var devicesData = data[0] || {};
+		var servicesData = data[1] || {};
+		var devices = devicesData.devices || [];
+		var allServices = servicesData.services || [];
 		var self = this;
+		
+		// Function to show services selection modal
+		function showServicesModal(device) {
+			var deviceServices = device.services || [];
+			var checkboxes = [];
+			
+			// Group services by category
+			var categories = servicesData.categories || {};
+			var grouped = {};
+			
+			allServices.forEach(function(svc) {
+				var cat = svc.category || 'other';
+				if (!grouped[cat]) grouped[cat] = [];
+				grouped[cat].push(svc);
+			});
+			
+			var content = E('div', { 'style': 'max-height: 400px; overflow-y: auto;' });
+			
+			Object.keys(grouped).sort().forEach(function(cat) {
+				var catName = categories[cat] || cat;
+				var catDiv = E('div', { 'style': 'margin-bottom: 15px;' }, [
+					E('strong', { 'style': 'display: block; margin-bottom: 5px; color: #22c55e;' }, catName)
+				]);
+				
+				grouped[cat].forEach(function(svc) {
+					var isChecked = deviceServices.indexOf(svc.id) !== -1;
+					var label = E('label', { 'style': 'display: block; padding: 3px 0; cursor: pointer;' }, [
+						E('input', {
+							'type': 'checkbox',
+							'data-service': svc.id,
+							'checked': isChecked ? 'checked' : null,
+							'style': 'margin-right: 8px;'
+						}),
+						svc.name
+					]);
+					catDiv.appendChild(label);
+				});
+				
+				content.appendChild(catDiv);
+			});
+			
+			ui.showModal('Выберите сервисы для ' + (device.name || device.id), [
+				E('p', {}, 'Выберите сервисы, трафик которых будет идти через VPN для этого устройства:'),
+				content,
+				E('div', { 'class': 'right', 'style': 'margin-top: 15px;' }, [
+					E('button', {
+						'class': 'btn',
+						'click': function() { ui.hideModal(); }
+					}, 'Отмена'),
+					' ',
+					E('button', {
+						'class': 'btn cbi-button-action',
+						'click': function() {
+							var selected = [];
+							content.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+								selected.push(cb.getAttribute('data-service'));
+							});
+							
+							ui.hideModal();
+							showLoading('Сохранение...');
+							
+							callSetDeviceServices(device.id, selected)
+								.then(function() {
+									return callApply();
+								})
+								.then(function() {
+									hideLoading();
+									window.location.reload();
+								})
+								.catch(function(e) {
+									hideLoading();
+									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+								});
+						}
+					}, 'Сохранить')
+				])
+			]);
+		}
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, 'Устройства PinPoint'),
@@ -323,8 +420,38 @@ return view.extend({
 									var s = ev.target;
 									var deviceId = s.getAttribute('data-device');
 									var newMode = s.value;
-									s.disabled = true;
 									
+									// If custom mode selected, show services modal
+									if (newMode === 'custom') {
+										var currentDevice = null;
+										for (var i = 0; i < devices.length; i++) {
+											if (devices[i].id === deviceId) {
+												currentDevice = devices[i];
+												break;
+											}
+										}
+										if (currentDevice) {
+											// First save mode, then show modal
+											s.disabled = true;
+											withLoading('Сохранение...', 
+												callSetDeviceMode(deviceId, null, newMode)
+													.then(function() {
+														return callApply();
+													})
+											).then(function() {
+												s.disabled = false;
+												// Update local device mode
+												currentDevice.mode = 'custom';
+												showServicesModal(currentDevice);
+											}).catch(function(e) {
+												s.disabled = false;
+												ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+											});
+										}
+										return;
+									}
+									
+									s.disabled = true;
 								return withLoading('Сохранение...', 
 										callSetDeviceMode(deviceId, null, newMode)
 											.then(function() {
@@ -344,7 +471,31 @@ return view.extend({
 								E('option', { 'value': 'custom' }, modeLabels['custom'])
 							]);
 							sel.value = device.mode || 'default';
-							return sel;
+							
+							var container = E('div', { 'style': 'display: flex; gap: 5px; align-items: center;' }, [sel]);
+							
+							// Add edit button for custom mode
+							if (device.mode === 'custom') {
+								var editBtn = E('button', {
+									'class': 'btn cbi-button',
+									'title': 'Редактировать сервисы',
+									'style': 'padding: 2px 8px;'
+								}, '⚙');
+								editBtn.onclick = function() {
+									showServicesModal(device);
+								};
+								container.appendChild(editBtn);
+								
+								// Show count of selected services
+								var count = (device.services || []).length;
+								if (count > 0) {
+									container.appendChild(E('span', { 
+										'style': 'font-size: 11px; color: #888;' 
+									}, '(' + count + ')'));
+								}
+							}
+							
+							return container;
 						})()
 					]),
 					E('div', { 'class': 'td' }, [

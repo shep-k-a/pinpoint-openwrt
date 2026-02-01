@@ -202,6 +202,7 @@ function set_device(params) {
 			if (params.enabled != null) data.devices[i].enabled = !!params.enabled;
 			if (params.mode != null) data.devices[i].mode = params.mode;
 			if (params.name != null) data.devices[i].name = params.name;
+			if (params.services != null) data.devices[i].services = params.services;
 			found = true;
 			break;
 		}
@@ -213,6 +214,37 @@ function set_device(params) {
 	
 	write_json(DEVICES_FILE, data);
 	return { success: true, id: device_id };
+}
+
+// Set device services (for custom mode)
+function set_device_services(params) {
+	let device_id = params.id;
+	let services = params.services || [];
+	
+	if (!device_id) {
+		return { error: 'Missing device id' };
+	}
+	
+	let data = read_json(DEVICES_FILE);
+	if (!data) {
+		return { error: 'Devices file not found' };
+	}
+	
+	let found = false;
+	for (let i = 0; i < length(data.devices); i++) {
+		if (data.devices[i].id == device_id) {
+			data.devices[i].services = services;
+			found = true;
+			break;
+		}
+	}
+	
+	if (!found) {
+		return { error: 'Device not found' };
+	}
+	
+	write_json(DEVICES_FILE, data);
+	return { success: true, id: device_id, services: services };
 }
 
 // Apply changes (run update script)
@@ -1530,9 +1562,15 @@ const methods = {
 		}
 	},
 	set_device: {
-		args: { id: 'id', enabled: true, mode: 'mode', name: 'name' },
+		args: { id: 'id', enabled: true, mode: 'mode', name: 'name', services: [] },
 		call: function(req) {
 			return set_device(req.args);
+		}
+	},
+	set_device_services: {
+		args: { id: 'id', services: [] },
+		call: function(req) {
+			return set_device_services(req.args);
 		}
 	},
 	apply: {
