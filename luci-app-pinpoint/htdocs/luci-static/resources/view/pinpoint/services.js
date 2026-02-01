@@ -188,7 +188,11 @@ return view.extend({
 						}
 					});
 					if (promises.length > 0) {
-						ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'info');
+						Promise.all(promises).then(function() {
+							return callApply();
+						}).then(function() {
+							ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'info');
+						});
 					}
 				})
 			}, 'Включить видимые'),
@@ -207,7 +211,11 @@ return view.extend({
 						}
 					});
 					if (promises.length > 0) {
-						ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'info');
+						Promise.all(promises).then(function() {
+							return callApply();
+						}).then(function() {
+							ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'info');
+						});
 					}
 				})
 			}, 'Выключить видимые')
@@ -295,7 +303,10 @@ return view.extend({
 										btn.setAttribute('data-enabled', newState ? '1' : '0');
 										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+										// Apply changes to update dnsmasq config
+										return callApply();
 									}
+								}).then(function() {
 									btn.disabled = false;
 								}).catch(function(e) {
 									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
