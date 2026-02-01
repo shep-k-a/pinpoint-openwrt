@@ -353,7 +353,7 @@ return view.extend({
 								'style': 'min-width: 80px'
 							}, device.enabled ? 'ВКЛ' : 'ВЫКЛ');
 							
-							btn.onclick = function() {
+							btn.onclick = function(e) {
 								if (isLoading) return;
 								
 								var deviceId = this.getAttribute('data-device');
@@ -363,23 +363,19 @@ return view.extend({
 								
 								that.disabled = true;
 								that.textContent = '...';
-								
 								showLoading(newState ? 'Включение...' : 'Выключение...');
 								
 								callSetDevice(deviceId, newState, null, null)
-									.then(function(result) {
-										if (result.success) {
-											that.setAttribute('data-enabled', newState ? '1' : '0');
-											that.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
-											that.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-											return callApply();
-										} else if (result.error) {
-											ui.addNotification(null, E('p', result.error), 'danger');
-										}
+									.then(function() {
+										that.setAttribute('data-enabled', newState ? '1' : '0');
+										that.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
+										that.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+										return callApply();
 									})
 									.then(function() {
 										hideLoading();
 										that.disabled = false;
+										ui.addNotification(null, E('p', newState ? 'Устройство включено' : 'Устройство выключено'), 'success');
 									})
 									.catch(function(e) {
 										hideLoading();
