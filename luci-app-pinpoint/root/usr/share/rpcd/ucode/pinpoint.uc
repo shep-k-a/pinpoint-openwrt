@@ -268,25 +268,113 @@ function update_subscriptions() {
 		return { error: 'No subscriptions configured' };
 	}
 	
+	let config = read_json('/etc/sing-box/config.json');
+	if (!config) {
+		config = { outbounds: [] };
+	}
+	if (!config.outbounds) {
+		config.outbounds = [];
+	}
+	
+	// Remove outbounds from previous subscription updates (keep non-subscription ones)
+	let keep_outbounds = [];
+	for (let ob in config.outbounds) {
+		// Keep system outbounds (direct, block, dns) and manually imported
+		if (!ob._subscription) {
+			push(keep_outbounds, ob);
+		}
+	}
+	config.outbounds = keep_outbounds;
+	
+	let total_imported = 0;
+	
 	// For each subscription, download and parse
 	for (let i = 0; i < length(subs.subscriptions); i++) {
 		let sub = subs.subscriptions[i];
-		let content = run_cmd('curl -s "' + sub.url + '" 2>/dev/null');
+		let content = run_cmd('curl -s -L --max-time 30 "' + sub.url + '" 2>/dev/null');
 		
-		if (content) {
-			// Try to count nodes (basic parsing)
-			let nodes = length(split(content, '\n'));
-			subs.subscriptions[i].nodes = nodes;
-			subs.subscriptions[i].updated = run_cmd('date "+%Y-%m-%d %H:%M"');
-			
-			// Save raw content
-			writefile(DATA_DIR + '/subscription_' + sub.id + '.txt', content);
+		if (!content || trim(content) == '') {
+			continue;
 		}
+		
+		content = trim(content);
+		let links = [];
+		
+		// Try to decode as Base64 first
+		if (!match(content, /^[a-z]+:\/\//i) && !match(content, /^\{/) && !match(content, /^proxies:/)) {
+			let decoded = run_cmd('echo "' + content + '" | base64 -d 2>/dev/null');
+			if (decoded && trim(decoded) != '') {
+				content = trim(decoded);
+			}
+		}
+		
+		// Parse content based on format
+		if (match(content, /^[a-z]+:\/\//i)) {
+			// Plain links (one per line)
+			links = split(content, '\n');
+		} else if (match(content, /^\{/)) {
+			// sing-box JSON format
+			try {
+				let sb_config = json(content);
+				if (sb_config.outbounds) {
+					for (let ob in sb_config.outbounds) {
+						if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
+							ob._subscription = sub.id;
+							push(config.outbounds, ob);
+							total_imported++;
+						}
+					}
+				}
+			} catch(e) {}
+			links = []; // Already processed
+		}
+		
+		// Parse VPN links
+		let nodes_count = 0;
+		for (let link in links) {
+			link = trim(link);
+			if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
+			
+			let outbound = parse_vpn_link(link);
+			if (outbound) {
+				outbound._subscription = sub.id;
+				
+				// Ensure unique tag
+				let base_tag = outbound.tag;
+				let counter = 1;
+				while (true) {
+					let duplicate = false;
+					for (let ob in config.outbounds) {
+						if (ob.tag == outbound.tag) {
+							duplicate = true;
+							break;
+						}
+					}
+					if (!duplicate) break;
+					outbound.tag = base_tag + '_' + counter;
+					counter++;
+				}
+				
+				push(config.outbounds, outbound);
+				nodes_count++;
+				total_imported++;
+			}
+		}
+		
+		subs.subscriptions[i].nodes = nodes_count;
+		subs.subscriptions[i].updated = trim(run_cmd('date "+%Y-%m-%d %H:%M"'));
+		
+		// Save raw content
+		writefile(DATA_DIR + '/subscription_' + sub.id + '.txt', content);
 	}
 	
+	write_json('/etc/sing-box/config.json', config);
 	write_json(SUBSCRIPTIONS_FILE, subs);
 	
-	return { success: true };
+	// Restart sing-box
+	run_cmd('/etc/init.d/sing-box restart 2>&1');
+	
+	return { success: true, imported: total_imported };
 }
 
 // Set active tunnel
