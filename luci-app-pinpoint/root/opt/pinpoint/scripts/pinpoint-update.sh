@@ -140,22 +140,26 @@ load_nftables() {
         done < "$f"
     done
     
-    # Add essential Meta/Instagram IP ranges ONLY if instagram/meta/facebook is enabled
-    # These are critical because ISP DNS hijacking may return CDN IPs
-    if service_enabled "instagram" || service_enabled "meta" || service_enabled "facebook"; then
-        for cidr in \
-            "31.13.24.0/21" \
-            "31.13.64.0/18" \
-            "157.240.0.0/16" \
-            "179.60.192.0/22" \
-            "185.60.216.0/22" \
-            "66.220.144.0/20" \
-            "69.63.176.0/20" \
-            "69.171.224.0/19" \
-            "129.134.0.0/16" \
-            "147.75.208.0/20"; do
-            nft add element inet pinpoint tunnel_nets "{ $cidr }" 2>/dev/null && loaded=$((loaded + 1))
-        done
+    # Add Meta CIDR blocks ONLY if dnsmasq does NOT support nftset (fallback mode)
+    # With dnsmasq-full, domain-based routing via nftset is preferred (more precise)
+    if ! dnsmasq --help 2>&1 | grep -q nftset; then
+        # Fallback: add static IP ranges for Meta services
+        if service_enabled "instagram" || service_enabled "meta" || service_enabled "facebook"; then
+            log "Adding Meta CIDR blocks (fallback mode - no nftset support)"
+            for cidr in \
+                "31.13.24.0/21" \
+                "31.13.64.0/18" \
+                "157.240.0.0/16" \
+                "179.60.192.0/22" \
+                "185.60.216.0/22" \
+                "66.220.144.0/20" \
+                "69.63.176.0/20" \
+                "69.171.224.0/19" \
+                "129.134.0.0/16" \
+                "147.75.208.0/20"; do
+                nft add element inet pinpoint tunnel_nets "{ $cidr }" 2>/dev/null && loaded=$((loaded + 1))
+            done
+        fi
     fi
     
     log "Loaded $loaded CIDRs to nftables"
