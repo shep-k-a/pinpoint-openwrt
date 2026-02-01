@@ -23,9 +23,39 @@ var callApply = rpc.declare({
 	expect: { }
 });
 
+var callGetTunnels = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'tunnels',
+	expect: { }
+});
+
+var callGetGroups = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'groups',
+	expect: { }
+});
+
+var callGetServiceRoutes = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'service_routes',
+	expect: { }
+});
+
+var callSetServiceRoute = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'set_service_route',
+	params: ['service_id', 'outbound'],
+	expect: { }
+});
+
 return view.extend({
 	load: function() {
-		return callGetServices();
+		return Promise.all([
+			callGetServices(),
+			callGetTunnels().catch(function() { return { tunnels: [] }; }),
+			callGetGroups().catch(function() { return { groups: [] }; }),
+			callGetServiceRoutes().catch(function() { return { routes: [] }; })
+		]);
 	},
 
 	filterServices: function(searchText, category) {
@@ -54,9 +84,32 @@ return view.extend({
 		});
 	},
 
-	render: function(data) {
+	render: function(results) {
+		var data = results[0] || {};
+		var tunnelsData = results[1] || {};
+		var groupsData = results[2] || {};
+		var routesData = results[3] || {};
+		
 		var services = data.services || [];
 		var categories = data.categories || {};
+		var tunnels = tunnelsData.tunnels || [];
+		var groups = groupsData.groups || [];
+		var routes = routesData.routes || [];
+		
+		// Build route lookup map
+		var routeMap = {};
+		routes.forEach(function(r) {
+			routeMap[r.service_id] = r.outbound;
+		});
+		
+		// Build outbound options
+		var outboundOptions = [{ tag: '', name: _('Default (first tunnel)') }];
+		tunnels.forEach(function(t) {
+			outboundOptions.push({ tag: t.tag, name: t.tag + ' (' + t.type + ')' });
+		});
+		groups.forEach(function(g) {
+			outboundOptions.push({ tag: g.tag, name: g.name + ' [' + (g.type === 'urltest' ? 'Auto' : 'Manual') + ']' });
+		});
 		
 		// Group services by category
 		var byCategory = {};
@@ -164,11 +217,14 @@ return view.extend({
 				E('div', { 'class': 'tr table-titles' }, [
 					E('div', { 'class': 'th' }, _('Service')),
 					E('div', { 'class': 'th' }, _('Domains')),
-					E('div', { 'class': 'th', 'style': 'width:100px' }, _('Status'))
+					E('div', { 'class': 'th', 'style': 'width:150px' }, _('Route via')),
+					E('div', { 'class': 'th', 'style': 'width:80px' }, _('Status'))
 				])
 			]);
 			
 			catServices.forEach(function(service) {
+				var currentRoute = routeMap[service.id] || '';
+				
 				var row = E('div', { 
 					'class': 'tr',
 					'data-service-id': service.id,
@@ -186,11 +242,34 @@ return view.extend({
 						)
 					]),
 					E('div', { 'class': 'td' }, [
+						E('select', {
+							'class': 'cbi-input-select',
+							'style': 'width: 140px; font-size: 12px;',
+							'data-service-route': service.id,
+							'change': ui.createHandlerFn(self, function(ev) {
+								var sel = ev.target;
+								var serviceId = sel.getAttribute('data-service-route');
+								var outbound = sel.value;
+								
+								callSetServiceRoute(serviceId, outbound).then(function(result) {
+									if (result.success) {
+										ui.addNotification(null, E('p', _('Route updated')), 'success');
+									}
+								});
+							})
+						}, outboundOptions.map(function(opt) {
+							return E('option', { 
+								'value': opt.tag, 
+								'selected': opt.tag === currentRoute 
+							}, opt.name);
+						}))
+					]),
+					E('div', { 'class': 'td' }, [
 						E('button', {
 							'class': 'btn cbi-button ' + (service.enabled ? 'cbi-button-positive' : 'cbi-button-neutral'),
 							'data-service': service.id,
 							'data-enabled': service.enabled ? '1' : '0',
-							'style': 'min-width: 70px',
+							'style': 'min-width: 60px',
 							'click': ui.createHandlerFn(self, function(ev) {
 								var btn = ev.target;
 								var serviceId = btn.getAttribute('data-service');

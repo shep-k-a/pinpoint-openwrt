@@ -70,20 +70,47 @@ var callRestart = rpc.declare({
 	expect: { }
 });
 
+var callGetGroups = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'groups',
+	expect: { }
+});
+
+var callAddGroup = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'add_group',
+	params: ['name', 'type', 'outbounds', 'interval'],
+	expect: { }
+});
+
+var callDeleteGroup = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'delete_group',
+	params: ['id'],
+	expect: { }
+});
+
 return view.extend({
 	load: function() {
-		return callGetTunnels();
+		return Promise.all([
+			callGetTunnels(),
+			callGetGroups()
+		]);
 	},
 
-	render: function(data) {
+	render: function(results) {
+		var data = results[0] || {};
+		var groupsData = results[1] || {};
+		
 		var tunnels = data.tunnels || [];
 		var subscriptions = data.subscriptions || [];
 		var activeTunnel = data.active || '';
+		var groups = groupsData.groups || [];
 		var self = this;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('VPN Tunnels')),
-			E('p', {}, _('Manage VPN subscriptions, import links, and select active tunnel.'))
+			E('p', {}, _('Manage VPN subscriptions, import links, select active tunnel, and configure server groups.'))
 		]);
 		
 		// ===== IMPORT SECTION WITH TABS =====
@@ -412,6 +439,154 @@ return view.extend({
 		}
 		
 		view.appendChild(tunnelSection);
+		
+		// ===== GROUPS SECTION =====
+		view.appendChild(E('h3', {}, _('Server Groups') + ' (' + groups.length + ')'));
+		
+		var groupSection = E('div', { 'class': 'cbi-section' }, [
+			E('div', { 'class': 'cbi-section-node' })
+		]);
+		
+		// Add group form
+		var addGroupForm = E('div', { 'style': 'margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;' }, [
+			E('strong', { 'style': 'display: block; margin-bottom: 10px;' }, _('Create New Group')),
+			E('div', { 'style': 'display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;' }, [
+				E('div', {}, [
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Name')),
+					E('input', {
+						'type': 'text',
+						'id': 'group-name',
+						'class': 'cbi-input-text',
+						'placeholder': _('My Group'),
+						'style': 'width: 150px;'
+					})
+				]),
+				E('div', {}, [
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Type')),
+					E('select', { 'id': 'group-type', 'class': 'cbi-input-select', 'style': 'width: 120px;' }, [
+						E('option', { 'value': 'urltest' }, _('Auto (urltest)')),
+						E('option', { 'value': 'selector' }, _('Manual (selector)'))
+					])
+				]),
+				E('div', {}, [
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Interval')),
+					E('select', { 'id': 'group-interval', 'class': 'cbi-input-select', 'style': 'width: 100px;' }, [
+						E('option', { 'value': '1m' }, '1 min'),
+						E('option', { 'value': '5m', 'selected': true }, '5 min'),
+						E('option', { 'value': '10m' }, '10 min'),
+						E('option', { 'value': '30m' }, '30 min')
+					])
+				]),
+				E('button', {
+					'class': 'btn cbi-button cbi-button-add',
+					'click': ui.createHandlerFn(self, function() {
+						var name = document.getElementById('group-name').value;
+						var type = document.getElementById('group-type').value;
+						var interval = document.getElementById('group-interval').value;
+						
+						if (!name) {
+							ui.addNotification(null, E('p', _('Please enter group name')), 'warning');
+							return;
+						}
+						
+						// Get selected tunnels
+						var checkboxes = document.querySelectorAll('.group-tunnel-checkbox:checked');
+						var outbounds = [];
+						checkboxes.forEach(function(cb) {
+							outbounds.push(cb.value);
+						});
+						
+						if (outbounds.length < 2) {
+							ui.addNotification(null, E('p', _('Select at least 2 tunnels')), 'warning');
+							return;
+						}
+						
+						ui.showModal(_('Creating...'), [
+							E('p', { 'class': 'spinning' }, _('Creating group...'))
+						]);
+						
+						return callAddGroup(name, type, outbounds, interval).then(function(result) {
+							ui.hideModal();
+							if (result.success) {
+								ui.addNotification(null, E('p', _('Group created')), 'success');
+								return callRestart().then(function() {
+									window.location.reload();
+								});
+							} else {
+								ui.addNotification(null, E('p', result.error || _('Failed')), 'danger');
+							}
+						});
+					})
+				}, _('Create Group'))
+			]),
+			E('div', { 'style': 'margin-top: 10px;' }, [
+				E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 5px;' }, _('Select tunnels for group:')),
+				E('div', { 'id': 'group-tunnels-select', 'style': 'display: flex; flex-wrap: wrap; gap: 10px;' },
+					tunnels.map(function(t) {
+						return E('label', { 'style': 'display: flex; align-items: center; gap: 4px; cursor: pointer;' }, [
+							E('input', {
+								'type': 'checkbox',
+								'class': 'group-tunnel-checkbox',
+								'value': t.tag
+							}),
+							t.tag
+						]);
+					})
+				)
+			])
+		]);
+		
+		groupSection.querySelector('.cbi-section-node').appendChild(addGroupForm);
+		
+		// Existing groups
+		if (groups.length > 0) {
+			var groupTable = E('div', { 'class': 'table', 'style': 'margin-top: 15px;' }, [
+				E('div', { 'class': 'tr table-titles' }, [
+					E('div', { 'class': 'th' }, _('Name')),
+					E('div', { 'class': 'th' }, _('Type')),
+					E('div', { 'class': 'th' }, _('Servers')),
+					E('div', { 'class': 'th' }, _('Interval')),
+					E('div', { 'class': 'th', 'style': 'width: 80px;' }, _('Actions'))
+				])
+			]);
+			
+			groups.forEach(function(g) {
+				groupTable.appendChild(E('div', { 'class': 'tr', 'data-group-id': g.id }, [
+					E('div', { 'class': 'td' }, [
+						E('strong', {}, g.name || g.tag)
+					]),
+					E('div', { 'class': 'td' }, g.type === 'urltest' ? _('Auto') : _('Manual')),
+					E('div', { 'class': 'td' }, (g.outbounds || []).length + ' ' + _('servers')),
+					E('div', { 'class': 'td' }, g.interval || '-'),
+					E('div', { 'class': 'td' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-remove',
+							'title': _('Delete'),
+							'data-id': g.id,
+							'click': ui.createHandlerFn(self, function(ev) {
+								var id = ev.target.getAttribute('data-id');
+								if (!confirm(_('Delete this group?'))) return;
+								
+								return callDeleteGroup(id).then(function(result) {
+									if (result.success) {
+										var row = document.querySelector('[data-group-id="' + id + '"]');
+										if (row) row.remove();
+										ui.addNotification(null, E('p', _('Group deleted')), 'success');
+										return callRestart();
+									} else {
+										ui.addNotification(null, E('p', result.error || _('Delete failed')), 'danger');
+									}
+								});
+							})
+						}, '✕')
+					])
+				]));
+			});
+			
+			groupSection.querySelector('.cbi-section-node').appendChild(groupTable);
+		}
+		
+		view.appendChild(groupSection);
 		
 		// ===== ACTIONS =====
 		view.appendChild(E('div', { 'class': 'cbi-page-actions' }, [
