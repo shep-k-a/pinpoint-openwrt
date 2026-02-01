@@ -536,6 +536,7 @@ install_dependencies() {
     # Configure dnsmasq to read confdir
     uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
     uci commit dhcp 2>/dev/null || true
+    mkdir -p /tmp/dnsmasq.d
     
     # Lua for LuCI integration
     install_package "lua" "Lua runtime"
@@ -1455,6 +1456,29 @@ install_luci_app() {
         install_package "nftables-json" "nftables firewall" || install_package "nftables" "nftables"
     fi
     install_package "ip-full" "iproute2 full"
+    
+    # DNS - install dnsmasq-full for nftset support (domain-based routing)
+    step "Installing dnsmasq-full (with nftset support)..."
+    if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
+        info "dnsmasq-full already installed"
+    else
+        # Remove standard dnsmasq if present (they conflict)
+        if opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
+            opkg remove dnsmasq --force-removal-of-dependent-packages >/dev/null 2>&1 || true
+        fi
+        opkg_quiet install dnsmasq-full
+        if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
+            info "dnsmasq-full installed"
+        else
+            warn "Failed to install dnsmasq-full - domain routing will use CIDR blocks only"
+            install_package "dnsmasq" "dnsmasq"
+        fi
+    fi
+    
+    # Configure dnsmasq to read confdir
+    uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+    mkdir -p /tmp/dnsmasq.d
     
     # Create directories
     step "Creating directories..."
