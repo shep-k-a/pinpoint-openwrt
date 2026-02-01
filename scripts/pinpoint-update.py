@@ -204,8 +204,29 @@ def process_service(service):
                 f.write(f"{cidr}\n")
         log(f"  Total: {len(all_cidrs)} CIDRs saved to {cidrs_file}")
 
+def check_nftset_support():
+    """Check if dnsmasq supports nftset directive"""
+    try:
+        result = subprocess.run(['dnsmasq', '--help'], capture_output=True, text=True, timeout=5)
+        return 'nftset' in result.stdout
+    except Exception:
+        return False
+
 def generate_dnsmasq_config():
     """Generate dnsmasq nftset configuration"""
+    
+    # Check if dnsmasq supports nftset
+    if not check_nftset_support():
+        log("dnsmasq does not support nftset - skipping dnsmasq config (using CIDR blocks only)")
+        # Remove config if exists to prevent dnsmasq from failing
+        config_path = Path("/tmp/dnsmasq.d/pinpoint.conf")
+        if config_path.exists():
+            config_path.unlink()
+        old_config = Path("/etc/dnsmasq.d/pinpoint.conf")
+        if old_config.exists():
+            old_config.unlink()
+        return
+    
     log("Generating dnsmasq config...")
     
     # Remove old config location if exists (migration from /etc to /tmp)

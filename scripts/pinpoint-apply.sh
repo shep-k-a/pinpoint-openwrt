@@ -78,10 +78,22 @@ load_service_lists() {
     fi
 }
 
+# Check if dnsmasq supports nftset
+check_nftset_support() {
+    dnsmasq --help 2>&1 | grep -q nftset
+}
+
 # Generate dnsmasq config from domain lists
 generate_dnsmasq_config() {
     local domains_file="$DATA_DIR/domains.json"
     local output_file="/etc/dnsmasq.d/pinpoint.conf"
+    
+    # Check if dnsmasq supports nftset
+    if ! check_nftset_support; then
+        log "dnsmasq does not support nftset - skipping config (using CIDR blocks only)"
+        rm -f "$output_file" /tmp/dnsmasq.d/pinpoint.conf 2>/dev/null
+        return
+    fi
     
     log "Generating dnsmasq config..."
     
@@ -170,6 +182,10 @@ case "${1:-reload}" in
         ;;
     add-domain)
         [ -z "$2" ] && echo "Usage: $0 add-domain <domain>" && exit 1
+        if ! check_nftset_support; then
+            echo "Error: dnsmasq does not support nftset. Install dnsmasq-full."
+            exit 1
+        fi
         echo "nftset=/$2/4#inet#pinpoint#tunnel_ips" >> /etc/dnsmasq.d/pinpoint.conf
         /etc/init.d/dnsmasq restart
         log "Added domain $2"
