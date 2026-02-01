@@ -345,47 +345,52 @@ return view.extend({
 						})()
 					]),
 					E('div', { 'class': 'td' }, [
-						E('button', {
-							'class': 'btn cbi-button ' + (device.enabled ? 'cbi-button-positive' : 'cbi-button-neutral'),
-							'data-device': device.id,
-							'data-enabled': device.enabled ? '1' : '0',
-							'style': 'min-width: 80px',
-							'click': ui.createHandlerFn(self, function(ev) {
+						(function() {
+							var btn = E('button', {
+								'class': 'btn cbi-button ' + (device.enabled ? 'cbi-button-positive' : 'cbi-button-neutral'),
+								'data-device': device.id,
+								'data-enabled': device.enabled ? '1' : '0',
+								'style': 'min-width: 80px'
+							}, device.enabled ? 'ВКЛ' : 'ВЫКЛ');
+							
+							btn.onclick = function() {
 								if (isLoading) return;
 								
-								var btn = ev.target;
-								var deviceId = btn.getAttribute('data-device');
-								var currentState = btn.getAttribute('data-enabled') === '1';
+								var deviceId = this.getAttribute('data-device');
+								var currentState = this.getAttribute('data-enabled') === '1';
 								var newState = !currentState;
+								var that = this;
 								
-								btn.disabled = true;
-								var origText = btn.textContent;
-								btn.textContent = '...';
+								that.disabled = true;
+								that.textContent = '...';
 								
-								return withLoading(newState ? 'Включение...' : 'Выключение...', 
-									callSetDevice(deviceId, newState, null, null)
-										.then(function(result) {
-											if (result.success) {
-												btn.setAttribute('data-enabled', newState ? '1' : '0');
-												btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
-												btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-												return callApply();
-											} else {
-												btn.textContent = origText;
-												if (result.error) {
-													ui.addNotification(null, E('p', result.error), 'danger');
-												}
-											}
-										})
-								).then(function() {
-									btn.disabled = false;
-								}).catch(function(e) {
-									btn.disabled = false;
-									btn.textContent = origText;
-									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
-								});
-							})
-						}, device.enabled ? 'ВКЛ' : 'ВЫКЛ')
+								showLoading(newState ? 'Включение...' : 'Выключение...');
+								
+								callSetDevice(deviceId, newState, null, null)
+									.then(function(result) {
+										if (result.success) {
+											that.setAttribute('data-enabled', newState ? '1' : '0');
+											that.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
+											that.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+											return callApply();
+										} else if (result.error) {
+											ui.addNotification(null, E('p', result.error), 'danger');
+										}
+									})
+									.then(function() {
+										hideLoading();
+										that.disabled = false;
+									})
+									.catch(function(e) {
+										hideLoading();
+										that.disabled = false;
+										that.textContent = currentState ? 'ВКЛ' : 'ВЫКЛ';
+										ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+									});
+							};
+							
+							return btn;
+						})()
 					]),
 					E('div', { 'class': 'td' }, [
 						E('button', {
