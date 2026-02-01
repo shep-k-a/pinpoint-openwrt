@@ -533,8 +533,12 @@ install_dependencies() {
         fi
     fi
     
-    # Configure dnsmasq to read confdir
+    # Configure dnsmasq to read confdir and use public DNS (bypass ISP DNS hijacking)
     uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
+    uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+    uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+    uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+    uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
     uci commit dhcp 2>/dev/null || true
     mkdir -p /tmp/dnsmasq.d
     
@@ -1475,8 +1479,12 @@ install_luci_app() {
         fi
     fi
     
-    # Configure dnsmasq to read confdir
+    # Configure dnsmasq to read confdir and use public DNS (bypass ISP DNS hijacking)
     uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
+    uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+    uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+    uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+    uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
     uci commit dhcp 2>/dev/null || true
     mkdir -p /tmp/dnsmasq.d
     
