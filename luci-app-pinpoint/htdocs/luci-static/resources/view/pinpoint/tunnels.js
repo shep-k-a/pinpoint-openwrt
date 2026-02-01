@@ -448,7 +448,7 @@ return view.extend({
 		]);
 		
 		// Add group form
-		var addGroupForm = E('div', { 'style': 'margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;' }, [
+		var addGroupForm = E('div', { 'class': 'cbi-section', 'style': 'margin-bottom: 15px; padding: 10px;' }, [
 			E('strong', { 'style': 'display: block; margin-bottom: 10px;' }, 'Создать новую группу'),
 			E('div', { 'style': 'display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;' }, [
 				E('div', {}, [
