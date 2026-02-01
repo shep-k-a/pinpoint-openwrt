@@ -283,16 +283,18 @@ window.addEventListener('hashchange', () => {
 // Dashboard
 async function refreshStatus() {
     try {
-        // Fetch status and traffic history in parallel
-        // Use large period (1 year) to get all available history for cumulative total
-        const [status, trafficData] = await Promise.all([
+        // Fetch status, service status and traffic history in parallel
+        const [status, serviceStatus, trafficData] = await Promise.all([
             api('/status'),
+            api('/service-status').catch(() => ({ singbox: { running: false } })),
             api('/traffic/history?minutes=525600').catch(() => ({ history: [] }))
         ]);
         
         // Update status indicator
         const indicator = document.getElementById('status-indicator');
         const message = document.getElementById('status-message');
+        
+        const singboxRunning = serviceStatus?.singbox?.running;
         
         if (status.vpn_active) {
             // VPN fully active
@@ -302,12 +304,12 @@ async function refreshStatus() {
             // tun1 up but VPN disabled
             indicator.className = 'status-indicator disabled';
             message.textContent = i18n.status.vpn_disabled;
-        } else if (status.status === 'stopped' || !status.vpn_configured) {
-            // VPN intentionally stopped or not configured
+        } else if (!singboxRunning) {
+            // sing-box not running - intentionally stopped
             indicator.className = 'status-indicator stopped';
             message.textContent = i18n.status.vpn_stopped;
         } else {
-            // Tunnel down - actual error
+            // sing-box running but tunnel down - actual error
             indicator.className = 'status-indicator error';
             message.textContent = i18n.status.tunnel_down;
         }
