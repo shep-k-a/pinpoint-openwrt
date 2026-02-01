@@ -2051,12 +2051,20 @@ async function loadHealth() {
             internet_via_tunnel: 'Доступ через VPN'
         };
         
+        // Check if sing-box is stopped - if so, all dependent components should show "СТОП"
+        const singboxStopped = data.components.sing_box?.status === 'stopped';
+        const vpnDependentComponents = ['tunnel', 'nftables', 'internet_via_tunnel'];
+        
         for (const [key, comp] of Object.entries(data.components)) {
             const isOk = ['running', 'up', 'ok'].includes(comp.status);
             const isStopped = ['stopped', 'not running', 'inactive'].includes(comp.status);
             const isDisabled = comp.status === 'disabled';
-            let statusClass = isOk ? 'ok' : (isStopped ? 'stopped' : (isDisabled ? 'disabled' : 'error'));
-            let statusText = isOk ? 'OK' : (isStopped ? 'СТОП' : (isDisabled ? 'ВЫКЛ' : 'ОШИБКА'));
+            
+            // If sing-box is stopped and this is a dependent component, show as stopped not error
+            const showAsStopped = isStopped || (singboxStopped && vpnDependentComponents.includes(key) && !isOk);
+            
+            let statusClass = isOk ? 'ok' : (showAsStopped ? 'stopped' : (isDisabled ? 'disabled' : 'error'));
+            let statusText = isOk ? 'OK' : (showAsStopped ? 'СТОП' : (isDisabled ? 'ВЫКЛ' : 'ОШИБКА'));
             
             html += `
                 <div class="health-item">
