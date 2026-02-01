@@ -129,33 +129,44 @@ return view.extend({
 		]);
 		
 		// Search and filter bar
+		var searchInput = E('input', {
+			'type': 'text',
+			'id': 'service-search',
+			'class': 'cbi-input-text',
+			'placeholder': 'Поиск сервисов...',
+			'style': 'flex: 1; min-width: 200px;'
+		});
+		
+		var categorySelect = E('select', {
+			'id': 'category-filter',
+			'class': 'cbi-input-select',
+			'style': 'width: 200px;'
+		}, [
+			E('option', { 'value': 'all' }, 'Все категории')
+		].concat(Object.keys(categories).sort().map(function(c) {
+			return E('option', { 'value': c }, categories[c] + ' (' + (byCategory[c] ? byCategory[c].length : 0) + ')');
+		})));
+		
+		// Add event listeners after elements are created
+		var filterTimeout = null;
+		searchInput.addEventListener('input', function(ev) {
+			clearTimeout(filterTimeout);
+			filterTimeout = setTimeout(function() {
+				var search = ev.target.value;
+				var cat = document.getElementById('category-filter').value;
+				self.filterServices(search, cat);
+			}, 150);
+		});
+		
+		categorySelect.addEventListener('change', function(ev) {
+			var cat = ev.target.value;
+			var search = document.getElementById('service-search').value;
+			self.filterServices(search, cat);
+		});
+		
 		var filterBar = E('div', { 'style': 'display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;' }, [
-			E('input', {
-				'type': 'text',
-				'id': 'service-search',
-				'class': 'cbi-input-text',
-				'placeholder': 'Поиск сервисов...',
-				'style': 'flex: 1; min-width: 200px;',
-				'input': ui.createHandlerFn(self, function(ev) {
-					var search = ev.target.value;
-					var cat = document.getElementById('category-filter').value;
-					self.filterServices(search, cat);
-				})
-			}),
-			E('select', {
-				'id': 'category-filter',
-				'class': 'cbi-input-select',
-				'style': 'width: 200px;',
-				'change': ui.createHandlerFn(self, function(ev) {
-					var cat = ev.target.value;
-					var search = document.getElementById('service-search').value;
-					self.filterServices(search, cat);
-				})
-			}, [
-				E('option', { 'value': 'all' }, 'Все категории')
-			].concat(Object.keys(categories).sort().map(function(c) {
-				return E('option', { 'value': c }, categories[c] + ' (' + (byCategory[c] ? byCategory[c].length : 0) + ')');
-			})))
+			searchInput,
+			categorySelect
 		]);
 		
 		view.appendChild(filterBar);

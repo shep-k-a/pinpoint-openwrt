@@ -181,7 +181,7 @@ generate_device_rules() {
         case "$mode" in
             vpn_all)
                 log "  Device $id: all traffic via VPN"
-                nft add rule inet pinpoint prerouting ip saddr "$ip" meta mark set 0x100 counter comment "\"pinpoint: device $id vpn_all\""
+                nft add rule inet pinpoint prerouting ip saddr "$ip" meta mark set 0x1 counter comment "\"pinpoint: device $id vpn_all\""
                 ;;
             direct_all)
                 log "  Device $id: all traffic direct"
