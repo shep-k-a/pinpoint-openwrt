@@ -1374,6 +1374,251 @@ uninstall() {
 }
 
 # ============================================
+# LuCI-Only (Lite) Installation
+# ============================================
+install_luci_app() {
+    echo ""
+    echo -e "${BLUE}Installing LuCI App (Lite Mode)${NC}"
+    echo "----------------------------------------"
+    
+    # Required packages for lite mode
+    step "Installing minimal dependencies..."
+    install_package "curl" "cURL"
+    install_package "ca-certificates" "CA certificates"
+    install_singbox
+    install_package "kmod-tun" "TUN kernel module"
+    
+    if command -v nft >/dev/null 2>&1; then
+        info "nftables - already installed"
+    else
+        install_package "nftables-json" "nftables firewall" || install_package "nftables" "nftables"
+    fi
+    install_package "ip-full" "iproute2 full"
+    
+    # Create directories
+    step "Creating directories..."
+    mkdir -p /www/luci-static/resources/view/pinpoint
+    mkdir -p /usr/share/rpcd/ucode
+    mkdir -p /usr/share/luci/menu.d
+    mkdir -p /usr/share/rpcd/acl.d
+    mkdir -p /opt/pinpoint/data
+    mkdir -p /opt/pinpoint/scripts
+    mkdir -p /etc/sing-box
+    
+    # Download LuCI app files
+    step "Downloading LuCI views..."
+    for view in status tunnels services devices custom logs settings; do
+        download "$GITHUB_REPO/luci-app-pinpoint/htdocs/luci-static/resources/view/pinpoint/${view}.js" \
+            "/www/luci-static/resources/view/pinpoint/${view}.js" || warn "Failed to download ${view}.js"
+    done
+    info "LuCI views downloaded"
+    
+    step "Downloading backend..."
+    download "$GITHUB_REPO/luci-app-pinpoint/root/usr/share/rpcd/ucode/pinpoint.uc" \
+        "/usr/share/rpcd/ucode/pinpoint.uc" || error "Failed to download pinpoint.uc"
+    info "Backend downloaded"
+    
+    step "Downloading menu and ACL..."
+    download "$GITHUB_REPO/luci-app-pinpoint/root/usr/share/luci/menu.d/luci-app-pinpoint.json" \
+        "/usr/share/luci/menu.d/luci-app-pinpoint.json" || error "Failed to download menu"
+    download "$GITHUB_REPO/luci-app-pinpoint/root/usr/share/rpcd/acl.d/luci-app-pinpoint.json" \
+        "/usr/share/rpcd/acl.d/luci-app-pinpoint.json" || error "Failed to download ACL"
+    info "Menu and ACL downloaded"
+    
+    step "Downloading update script..."
+    download "$GITHUB_REPO/luci-app-pinpoint/root/opt/pinpoint/scripts/pinpoint-update.sh" \
+        "/opt/pinpoint/scripts/pinpoint-update.sh" || true
+    chmod +x /opt/pinpoint/scripts/*.sh 2>/dev/null || true
+    info "Scripts downloaded"
+    
+    step "Downloading services database..."
+    download "$GITHUB_REPO/data/services.json" "/opt/pinpoint/data/services.json" || true
+    info "Services database downloaded"
+    
+    # Initialize data files
+    step "Initializing data files..."
+    [ -f /opt/pinpoint/data/custom_services.json ] || echo '{"services":[]}' > /opt/pinpoint/data/custom_services.json
+    [ -f /opt/pinpoint/data/subscriptions.json ] || echo '{"subscriptions":[]}' > /opt/pinpoint/data/subscriptions.json
+    [ -f /opt/pinpoint/data/settings.json ] || echo '{"auto_update":true,"update_interval":21600}' > /opt/pinpoint/data/settings.json
+    [ -f /opt/pinpoint/data/devices.json ] || echo '{"devices":[]}' > /opt/pinpoint/data/devices.json
+    [ -f /etc/config/pinpoint ] || touch /etc/config/pinpoint
+    info "Data files initialized"
+    
+    # Create sing-box config if not exists
+    if [ ! -f /etc/sing-box/config.json ]; then
+        step "Creating default sing-box config..."
+        cat > /etc/sing-box/config.json << 'SBCFG'
+{
+  "log": {"level": "info"},
+  "dns": {
+    "servers": [
+      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun1",
+      "address": ["10.0.0.1/30"],
+      "mtu": 1400,
+      "auto_route": false,
+      "sniff": true,
+      "stack": "gvisor"
+    }
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct-out"},
+    {"type": "dns", "tag": "dns-out"}
+  ],
+  "route": {
+    "rules": [{"protocol": "dns", "outbound": "dns-out"}],
+    "auto_detect_interface": true
+  }
+}
+SBCFG
+        info "sing-box config created"
+    fi
+    
+    # Create sing-box init script
+    step "Creating sing-box service..."
+    cat > /etc/init.d/sing-box << 'SBINIT'
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=15
+
+start() {
+    echo "Starting sing-box..."
+    /usr/bin/sing-box run -c /etc/sing-box/config.json > /var/log/sing-box.log 2>&1 &
+    echo $! > /var/run/sing-box.pid
+}
+
+stop() {
+    echo "Stopping sing-box..."
+    if [ -f /var/run/sing-box.pid ]; then
+        kill $(cat /var/run/sing-box.pid) 2>/dev/null
+        rm -f /var/run/sing-box.pid
+    fi
+    killall sing-box 2>/dev/null || true
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+SBINIT
+    chmod +x /etc/init.d/sing-box
+    /etc/init.d/sing-box enable 2>/dev/null || true
+    
+    # Restart rpcd
+    step "Restarting rpcd..."
+    /etc/init.d/rpcd restart >/dev/null 2>&1
+    
+    # Clear LuCI cache
+    rm -rf /tmp/luci-* 2>/dev/null || true
+    
+    # Verify installation
+    sleep 2
+    step "Verifying installation..."
+    if ubus list 2>/dev/null | grep -q "luci.pinpoint"; then
+        info "luci.pinpoint registered successfully!"
+    else
+        warn "luci.pinpoint not found in ubus. Check: logread | grep rpcd"
+    fi
+    
+    info "LuCI App installed"
+}
+
+print_success_lite() {
+    IP=$(get_lan_ip)
+    
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                                                    ║${NC}"
+    echo -e "${GREEN}║    PinPoint Lite installed successfully! 🎉       ║${NC}"
+    echo -e "${GREEN}║                                                    ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${CYAN}Access via LuCI:${NC}"
+    echo -e "    http://${GREEN}$IP${NC}/cgi-bin/luci/admin/vpn/pinpoint"
+    echo ""
+    echo -e "  ${CYAN}Menu Location:${NC}"
+    echo "    VPN → PinPoint"
+    echo ""
+    echo -e "  ${CYAN}Features:${NC}"
+    echo "    • Import VPN links (vless/vmess/ss/trojan/hysteria2)"
+    echo "    • Manage subscriptions"
+    echo "    • Service-based routing"
+    echo "    • Device management with network discovery"
+    echo "    • Custom services"
+    echo "    • Logs & domain testing"
+    echo ""
+    echo -e "  ${CYAN}sing-box Commands:${NC}"
+    echo "    /etc/init.d/sing-box start"
+    echo "    /etc/init.d/sing-box stop"
+    echo "    /etc/init.d/sing-box restart"
+    echo ""
+}
+
+# ============================================
+# Installation Mode Selection
+# ============================================
+select_install_mode() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       Select Installation Mode         ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${GREEN}1)${NC} ${CYAN}Full${NC} - Standalone web interface (port 8080)"
+    echo "     • Python backend with REST API"
+    echo "     • Full-featured dashboard"
+    echo "     • Traffic statistics & charts"
+    echo "     • Requires ~50MB RAM"
+    echo ""
+    echo -e "  ${GREEN}2)${NC} ${CYAN}Lite${NC} - LuCI integration only"
+    echo "     • Native OpenWRT UI integration"
+    echo "     • Minimal resource usage (~5MB RAM)"
+    echo "     • All core features included"
+    echo "     • Recommended for low-memory devices"
+    echo ""
+    
+    while true; do
+        printf "  Select mode [1/2]: "
+        read MODE_CHOICE
+        case "$MODE_CHOICE" in
+            1|full|Full|FULL)
+                INSTALL_MODE="full"
+                break
+                ;;
+            2|lite|Lite|LITE)
+                INSTALL_MODE="lite"
+                break
+                ;;
+            "")
+                # Default to lite for low-memory devices
+                MEM_TOTAL=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
+                if [ -n "$MEM_TOTAL" ] && [ "$MEM_TOTAL" -lt 131072 ]; then
+                    info "Low memory detected, defaulting to Lite mode"
+                    INSTALL_MODE="lite"
+                else
+                    INSTALL_MODE="full"
+                fi
+                break
+                ;;
+            *)
+                warn "Please enter 1 or 2"
+                ;;
+        esac
+    done
+    
+    echo ""
+    info "Selected: $INSTALL_MODE mode"
+}
+
+# ============================================
 # Main
 # ============================================
 main() {
@@ -1402,6 +1647,15 @@ main() {
         exit 0
     fi
     
+    # Check for mode flags
+    if [ "$1" = "--lite" ] || [ "$1" = "-l" ]; then
+        INSTALL_MODE="lite"
+    elif [ "$1" = "--full" ] || [ "$1" = "-f" ]; then
+        INSTALL_MODE="full"
+    else
+        INSTALL_MODE=""
+    fi
+    
     # Pre-flight checks
     echo -e "${BLUE}Pre-flight Checks${NC}"
     echo "----------------------------------------"
@@ -1412,24 +1666,42 @@ main() {
     check_disk_space
     echo ""
     
-    # Install
+    # Select mode if not specified
+    if [ -z "$INSTALL_MODE" ]; then
+        select_install_mode
+    fi
+    
+    # Update packages
     update_packages
-    create_directories
-    install_dependencies
-    save_installed_packages
-    install_python_packages
-    download_files
-    setup_luci
-    setup_default_config
-    setup_authentication
-    create_init_script
-    create_routing_scripts
-    install_hotplug_scripts
-    create_singbox_config
-    setup_firewall
-    start_service
-    cleanup_install
-    print_success
+    
+    # Branch based on mode
+    if [ "$INSTALL_MODE" = "lite" ]; then
+        # Lite installation
+        install_luci_app
+        create_routing_scripts
+        install_hotplug_scripts
+        setup_firewall
+        cleanup_install
+        print_success_lite
+    else
+        # Full installation
+        create_directories
+        install_dependencies
+        save_installed_packages
+        install_python_packages
+        download_files
+        setup_luci
+        setup_default_config
+        setup_authentication
+        create_init_script
+        create_routing_scripts
+        install_hotplug_scripts
+        create_singbox_config
+        setup_firewall
+        start_service
+        cleanup_install
+        print_success
+    fi
 }
 
 # Run
