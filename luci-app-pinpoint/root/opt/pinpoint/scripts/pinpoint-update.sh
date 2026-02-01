@@ -56,8 +56,15 @@ parse_keenetic() {
     done | sort -u
 }
 
-# Generate dnsmasq config
+# Generate dnsmasq config (only if dnsmasq-full with nftset support is installed)
 generate_dnsmasq() {
+    # Check if dnsmasq supports nftset
+    if ! dnsmasq --help 2>&1 | grep -q nftset; then
+        log "dnsmasq does not support nftset - skipping dnsmasq config"
+        rm -f "$DNSMASQ_CONF" 2>/dev/null
+        return
+    fi
+    
     log "Generating dnsmasq config..."
     
     mkdir -p "$(dirname "$DNSMASQ_CONF")"
