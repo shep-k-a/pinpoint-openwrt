@@ -286,7 +286,7 @@ async function refreshStatus() {
         // Fetch status, service status and traffic history in parallel
         const [status, serviceStatus, trafficData] = await Promise.all([
             api('/status'),
-            api('/service-status').catch(() => ({ singbox: { running: false } })),
+            api('/service/status').catch(() => ({ singbox: { running: false } })),
             api('/traffic/history?minutes=525600').catch(() => ({ history: [] }))
         ]);
         
