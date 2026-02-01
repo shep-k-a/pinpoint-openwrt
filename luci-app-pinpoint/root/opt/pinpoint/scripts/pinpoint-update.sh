@@ -105,6 +105,15 @@ HEADER
         done < "$f" >> "$DNSMASQ_CONF"
     done
     
+    # Add custom services
+    CUSTOM_FILE="$DATA_DIR/custom_services.json"
+    if [ -f "$CUSTOM_FILE" ] && command -v jsonfilter >/dev/null 2>&1; then
+        jsonfilter -i "$CUSTOM_FILE" -e '@.services[@.enabled=true].domains[*]' 2>/dev/null | \
+        sort -u | while read -r domain; do
+            [ -n "$domain" ] && echo "nftset=/$domain/4#inet#pinpoint#tunnel_ips"
+        done >> "$DNSMASQ_CONF"
+    fi
+    
     log "dnsmasq config generated"
 }
 

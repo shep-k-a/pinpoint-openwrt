@@ -533,14 +533,32 @@ install_dependencies() {
         fi
     fi
     
-    # Configure dnsmasq to read confdir and use public DNS (bypass ISP DNS hijacking)
+    # Configure dnsmasq confdir
     uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
-    uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
-    uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
-    uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
-    uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
-    uci commit dhcp 2>/dev/null || true
     mkdir -p /tmp/dnsmasq.d
+    
+    # Install https-dns-proxy to bypass ISP DNS hijacking (DPI)
+    step "Installing https-dns-proxy (DNS over HTTPS)..."
+    install_package "https-dns-proxy" "https-dns-proxy"
+    
+    # Configure dnsmasq to use DoH proxy (bypasses ISP DNS interception)
+    if [ -x /etc/init.d/https-dns-proxy ]; then
+        /etc/init.d/https-dns-proxy enable 2>/dev/null || true
+        /etc/init.d/https-dns-proxy start 2>/dev/null || true
+        # Use local DoH proxy (127.0.0.1:5053)
+        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+        uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#5053' 2>/dev/null || true
+        info "DNS over HTTPS enabled (bypasses ISP DNS hijacking)"
+    else
+        # Fallback to public DNS (may be intercepted by ISP)
+        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+        uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+        warn "https-dns-proxy not available, using plain DNS (may be intercepted)"
+    fi
+    uci commit dhcp 2>/dev/null || true
     
     # Lua for LuCI integration
     install_package "lua" "Lua runtime"
@@ -1479,14 +1497,32 @@ install_luci_app() {
         fi
     fi
     
-    # Configure dnsmasq to read confdir and use public DNS (bypass ISP DNS hijacking)
+    # Configure dnsmasq confdir
     uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
-    uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
-    uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
-    uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
-    uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
-    uci commit dhcp 2>/dev/null || true
     mkdir -p /tmp/dnsmasq.d
+    
+    # Install https-dns-proxy to bypass ISP DNS hijacking (DPI)
+    step "Installing https-dns-proxy (DNS over HTTPS)..."
+    install_package "https-dns-proxy" "https-dns-proxy"
+    
+    # Configure dnsmasq to use DoH proxy (bypasses ISP DNS interception)
+    if [ -x /etc/init.d/https-dns-proxy ]; then
+        /etc/init.d/https-dns-proxy enable 2>/dev/null || true
+        /etc/init.d/https-dns-proxy start 2>/dev/null || true
+        # Use local DoH proxy (127.0.0.1:5053)
+        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+        uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#5053' 2>/dev/null || true
+        info "DNS over HTTPS enabled (bypasses ISP DNS hijacking)"
+    else
+        # Fallback to public DNS (may be intercepted by ISP)
+        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+        uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+        uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+        warn "https-dns-proxy not available, using plain DNS (may be intercepted)"
+    fi
+    uci commit dhcp 2>/dev/null || true
     
     # Create directories
     step "Creating directories..."
