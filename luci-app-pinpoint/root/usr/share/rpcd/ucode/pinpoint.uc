@@ -83,6 +83,13 @@ function get_status() {
 		singbox_running = true;
 	}
 	
+	// Check https-dns-proxy (DoH)
+	let doh_running = false;
+	let doh_out = run_cmd('pgrep https-dns-proxy');
+	if (doh_out && trim(doh_out) != '') {
+		doh_running = true;
+	}
+	
 	// Get nftables stats
 	let packets = 0, bytes = 0, nets = 0, ips = 0;
 	let nft_out = run_cmd('nft list chain inet pinpoint prerouting 2>/dev/null');
@@ -119,6 +126,7 @@ function get_status() {
 	return {
 		tunnel_up: tun_up,
 		singbox_running: singbox_running,
+		doh_running: doh_running,
 		vpn_active: tun_up && singbox_running,
 		stats: {
 			packets: packets,

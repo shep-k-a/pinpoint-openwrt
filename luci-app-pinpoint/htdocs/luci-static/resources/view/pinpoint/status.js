@@ -71,6 +71,14 @@ return view.extend({
 							E('div', { 'class': 'td left' }, status.singbox_running ? _('Running') : _('Stopped'))
 						]),
 						E('div', { 'class': 'tr' }, [
+							E('div', { 'class': 'td left' }, _('DNS over HTTPS')),
+							E('div', { 'class': 'td left' }, [
+								E('span', {
+									'style': 'color: ' + (status.doh_running ? '#28a745' : '#888')
+								}, status.doh_running ? _('Active') : _('Not installed'))
+							])
+						]),
+						E('div', { 'class': 'tr' }, [
 							E('div', { 'class': 'td left' }, _('Enabled Services')),
 							E('div', { 'class': 'td left' }, status.enabled_services || 0)
 						]),
