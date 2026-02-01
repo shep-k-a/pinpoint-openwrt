@@ -186,37 +186,35 @@ generate_device_rules() {
     
     [ -f "$DEVICES_FILE" ] || return
     
-    # Simple JSON parsing for devices
-    # Format: extract id, ip, mode, enabled for each device
-    awk '
-        BEGIN { in_device=0 }
-        /"devices"/ { in_devices=1 }
-        in_devices && /\{/ { in_device=1; id=""; ip=""; mode="default"; enabled=0 }
-        in_device && /"id"/ { gsub(/.*"id"[[:space:]]*:[[:space:]]*"|".*/, ""); id=$0 }
-        in_device && /"ip"/ { gsub(/.*"ip"[[:space:]]*:[[:space:]]*"|".*/, ""); ip=$0 }
-        in_device && /"mode"/ { gsub(/.*"mode"[[:space:]]*:[[:space:]]*"|".*/, ""); mode=$0 }
-        in_device && /"enabled"[[:space:]]*:[[:space:]]*true/ { enabled=1 }
-        in_device && /\}/ {
-            if (enabled && ip != "") {
-                print id, ip, mode
-            }
-            in_device=0
-        }
-    ' "$DEVICES_FILE" | while read -r id ip mode; do
-        case "$mode" in
-            vpn_all)
-                log "  Device $id: all traffic via VPN"
-                nft add rule inet pinpoint prerouting ip saddr "$ip" meta mark set 0x1 counter comment "\"pinpoint: device $id vpn_all\""
-                ;;
-            direct_all)
-                log "  Device $id: all traffic direct"
-                nft add rule inet pinpoint prerouting ip saddr "$ip" return comment "\"pinpoint: device $id direct_all\""
-                ;;
-            custom)
-                log "  Device $id: custom mode (not implemented in lite)"
-                ;;
-        esac
-    done
+    # Use jsonfilter if available (proper JSON parsing for single-line JSON)
+    if command -v jsonfilter >/dev/null 2>&1; then
+        # Get all device IDs
+        local ids=$(jsonfilter -i "$DEVICES_FILE" -e '@.devices[*].id' 2>/dev/null)
+        local idx=0
+        
+        for id in $ids; do
+            local enabled=$(jsonfilter -i "$DEVICES_FILE" -e "@.devices[$idx].enabled" 2>/dev/null)
+            local ip=$(jsonfilter -i "$DEVICES_FILE" -e "@.devices[$idx].ip" 2>/dev/null)
+            local mode=$(jsonfilter -i "$DEVICES_FILE" -e "@.devices[$idx].mode" 2>/dev/null)
+            
+            if [ "$enabled" = "true" ] && [ -n "$ip" ]; then
+                case "$mode" in
+                    vpn_all)
+                        log "  Device $id ($ip): all traffic via VPN"
+                        nft add rule inet pinpoint prerouting ip saddr "$ip" meta mark set 0x1 counter comment "\"pinpoint: device $id vpn_all\""
+                        ;;
+                    direct_all)
+                        log "  Device $id ($ip): all traffic direct"
+                        nft add rule inet pinpoint prerouting ip saddr "$ip" return comment "\"pinpoint: device $id direct_all\""
+                        ;;
+                    custom)
+                        log "  Device $id: custom mode"
+                        ;;
+                esac
+            fi
+            idx=$((idx + 1))
+        done
+    fi
 }
 
 # Restart dnsmasq

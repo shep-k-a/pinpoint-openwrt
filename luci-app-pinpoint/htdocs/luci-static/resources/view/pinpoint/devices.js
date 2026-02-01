@@ -274,13 +274,16 @@ return view.extend({
 								var deviceId = sel.getAttribute('data-device');
 								var newMode = sel.value;
 								
-								return callSetDevice(deviceId, null, newMode, null).then(function(result) {
-									if (!result.success && result.error) {
-										ui.addNotification(null, E('p', result.error), 'danger');
-									}
-								}).catch(function(e) {
-									ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
-								});
+							return callSetDevice(deviceId, null, newMode, null).then(function(result) {
+								if (!result.success && result.error) {
+									ui.addNotification(null, E('p', result.error), 'danger');
+								} else {
+									// Apply changes to update nftables rules
+									return callApply();
+								}
+							}).catch(function(e) {
+								ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+							});
 							})
 						}, [
 							E('option', { 'value': 'default', 'selected': device.mode === 'default' }, modeLabels['default']),
@@ -304,17 +307,20 @@ return view.extend({
 								btn.disabled = true;
 								btn.textContent = '...';
 								
-								return callSetDevice(deviceId, newState, null, null).then(function(result) {
-									if (result.success) {
-										btn.setAttribute('data-enabled', newState ? '1' : '0');
-										btn.textContent = newState ? _('ON') : _('OFF');
-										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-									} else if (result.error) {
-										ui.addNotification(null, E('p', result.error), 'danger');
-										btn.textContent = currentState ? _('ON') : _('OFF');
-									}
-									btn.disabled = false;
-								}).catch(function(e) {
+							return callSetDevice(deviceId, newState, null, null).then(function(result) {
+								if (result.success) {
+									btn.setAttribute('data-enabled', newState ? '1' : '0');
+									btn.textContent = newState ? _('ON') : _('OFF');
+									btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+									// Apply changes to update nftables rules
+									return callApply();
+								} else if (result.error) {
+									ui.addNotification(null, E('p', result.error), 'danger');
+									btn.textContent = currentState ? _('ON') : _('OFF');
+								}
+							}).then(function() {
+								btn.disabled = false;
+							}).catch(function(e) {
 									ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
 									btn.disabled = false;
 									btn.textContent = currentState ? _('ON') : _('OFF');
