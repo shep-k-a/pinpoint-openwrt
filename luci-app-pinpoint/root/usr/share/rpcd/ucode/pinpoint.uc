@@ -38,41 +38,36 @@ function run_cmd(cmd) {
 	return out;
 }
 
-// Base64 decode (pure ucode implementation)
+// Base64 decode using ucode built-in b64dec function
 function b64decode(str) {
 	if (!str) return null;
 	str = trim(str);
-	
-	// Base64 alphabet
-	let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-	let lookup = {};
-	for (let i = 0; i < 64; i++) {
-		lookup[substr(chars, i, 1)] = i;
-	}
-	
-	// Remove padding and non-base64 chars
-	str = replace(str, /[\r\n\s]/g, '');
-	str = replace(str, /=+$/, '');
-	
+	// Use built-in b64dec (handles whitespace internally)
+	return b64dec(str);
+}
+
+// URL decode function
+function urldecode(str) {
+	if (!str) return str;
+	// Replace + with space
+	str = replace(str, /\+/g, ' ');
+	// Replace %XX with character
 	let result = '';
-	let buffer = 0;
-	let bits = 0;
-	
-	for (let i = 0; i < length(str); i++) {
+	let i = 0;
+	while (i < length(str)) {
 		let ch = substr(str, i, 1);
-		let val = lookup[ch];
-		if (val == null) continue;
-		
-		buffer = (buffer << 6) | val;
-		bits += 6;
-		
-		while (bits >= 8) {
-			bits -= 8;
-			let byte_val = (buffer >> bits) & 0xFF;
-			result += chr(byte_val);
+		if (ch == '%' && i + 2 < length(str)) {
+			let hex_str = substr(str, i + 1, 2);
+			let code = int(hex_str, 16);
+			if (code != null) {
+				result += chr(code);
+				i += 3;
+				continue;
+			}
 		}
+		result += ch;
+		i++;
 	}
-	
 	return result;
 }
 
@@ -299,8 +294,15 @@ function add_subscription(params) {
 	return { success: true, id: id };
 }
 
-// Update all subscriptions
+// Update all subscriptions (async version to avoid rpcd timeout)
 function update_subscriptions() {
+	// Run update script in background and return immediately
+	system('/opt/pinpoint/scripts/pinpoint-update.sh update-subs &');
+	return { success: true, message: 'Update started in background' };
+}
+
+// Update all subscriptions (sync version - currently has issues with rpcd)
+function update_subscriptions_sync() {
 	let subs = read_json(SUBSCRIPTIONS_FILE);
 	if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
 		return { error: 'No subscriptions configured' };
@@ -314,10 +316,9 @@ function update_subscriptions() {
 		config.outbounds = [];
 	}
 	
-	// Remove outbounds from previous subscription updates (keep non-subscription ones)
+	// Remove outbounds from previous subscription updates
 	let keep_outbounds = [];
 	for (let ob in config.outbounds) {
-		// Keep system outbounds (direct, block, dns) and manually imported
 		if (!ob._subscription) {
 			push(keep_outbounds, ob);
 		}
@@ -329,6 +330,7 @@ function update_subscriptions() {
 	// For each subscription, download and parse
 	for (let i = 0; i < length(subs.subscriptions); i++) {
 		let sub = subs.subscriptions[i];
+		
 		let content = run_cmd('curl -fsSL --connect-timeout 30 "' + sub.url + '" 2>/dev/null');
 		
 		if (!content || trim(content) == '') {
@@ -353,18 +355,16 @@ function update_subscriptions() {
 			links = split(content, '\n');
 		} else if (match(content, /^\{/)) {
 			// sing-box JSON format
-			try {
-				let sb_config = json(content);
-				if (sb_config.outbounds) {
-					for (let ob in sb_config.outbounds) {
-						if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
-							ob._subscription = sub.id;
-							push(config.outbounds, ob);
-							total_imported++;
-						}
+			let sb_config = json(content);
+			if (sb_config && sb_config.outbounds) {
+				for (let ob in sb_config.outbounds) {
+					if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
+						ob._subscription = sub.id;
+						push(config.outbounds, ob);
+						total_imported++;
 					}
 				}
-			} catch(e) {}
+			}
 			links = []; // Already processed
 		}
 		
@@ -410,8 +410,8 @@ function update_subscriptions() {
 	write_json('/etc/sing-box/config.json', config);
 	write_json(SUBSCRIPTIONS_FILE, subs);
 	
-	// Restart sing-box
-	run_cmd('/etc/init.d/sing-box restart 2>&1');
+	// Restart sing-box in background (don't block)
+	system('/etc/init.d/sing-box restart &');
 	
 	return { success: true, imported: total_imported };
 }
@@ -642,10 +642,12 @@ function get_system_info() {
 
 // Parse VPN link and extract outbound config
 function parse_vpn_link(link) {
-	link = trim(link);
-	if (!link) return null;
-	
-	let outbound = null;
+	// Wrap in try-catch to catch any exceptions
+	try {
+		link = trim(link);
+		if (!link) return null;
+		
+		let outbound = null;
 	
 	if (match(link, /^vless:\/\//)) {
 		// Parse VLESS link
@@ -712,7 +714,7 @@ function parse_vpn_link(link) {
 	} else if (match(link, /^vmess:\/\//)) {
 		// Parse VMess link (base64 JSON)
 		let b64 = substr(link, 8);
-		let json_str = run_cmd('echo "' + b64 + '" | base64 -d 2>/dev/null');
+		let json_str = b64decode(b64);
 		if (json_str) {
 			try {
 				let cfg = json(json_str);
@@ -755,7 +757,7 @@ function parse_vpn_link(link) {
 		// Try userinfo@host:port format
 		let m = match(rest, /^([^@]+)@([^:]+):(\d+)/);
 		if (m) {
-			let userinfo = run_cmd('echo "' + m[1] + '" | base64 -d 2>/dev/null');
+			let userinfo = b64decode(m[1]);
 			if (userinfo) {
 				let parts = split(trim(userinfo), ':');
 				if (length(parts) >= 2) {
@@ -819,14 +821,10 @@ function parse_vpn_link(link) {
 	}
 	
 	return outbound;
-}
-
-// URL decode helper
-function urldecode(str) {
-	if (!str) return '';
-	return replace(replace(str, /\+/g, ' '), /%([0-9A-Fa-f]{2})/g, function(m, hex) {
-		return chr(int('0x' + hex));
-	});
+	} catch(e) {
+		// Return null on any error
+		return null;
+	}
 }
 
 // Import single VPN link

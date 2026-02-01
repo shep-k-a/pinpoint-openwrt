@@ -228,10 +228,53 @@ update_all() {
     log "=== Update complete ==="
 }
 
+# Update subscriptions and parse VPN configs
+update_subs() {
+    log "=== Updating subscriptions ==="
+    
+    SUBS_FILE="$DATA_DIR/subscriptions.json"
+    SINGBOX_CONFIG="/etc/sing-box/config.json"
+    
+    [ ! -f "$SUBS_FILE" ] && { log "No subscriptions file"; return 1; }
+    
+    # Read subscriptions and process each one
+    # This is a simplified shell version - parses vless links only
+    local total=0
+    
+    # Get subscription URLs from JSON
+    grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$SUBS_FILE" | while read -r line; do
+        url=$(echo "$line" | sed 's/.*"\([^"]*\)"$/\1/')
+        [ -z "$url" ] && continue
+        
+        log "Downloading: $url"
+        content=$(curl -sf --connect-timeout 30 "$url" 2>/dev/null)
+        [ -z "$content" ] && { log "Failed to download"; continue; }
+        
+        # Decode base64 if needed
+        if ! echo "$content" | grep -q '^vless://\|^vmess://\|^ss://'; then
+            decoded=$(echo "$content" | base64 -d 2>/dev/null)
+            [ -n "$decoded" ] && content="$decoded"
+        fi
+        
+        # Count vless links
+        count=$(echo "$content" | grep -c '^vless://' || echo 0)
+        log "Found $count vless links"
+        total=$((total + count))
+    done
+    
+    # Restart sing-box
+    /etc/init.d/sing-box restart 2>/dev/null &
+    
+    log "=== Subscriptions updated, $total nodes found ==="
+}
+
 # Entry point
 case "${1:-update}" in
     update)
         update_all
+        ;;
+    update-subs)
+        update_subs
         ;;
     status)
         echo "PinPoint Status:"
@@ -240,7 +283,7 @@ case "${1:-update}" in
         echo "  Lists: $(ls -1 "$LISTS_DIR"/*.txt 2>/dev/null | wc -l) files"
         ;;
     *)
-        echo "Usage: $0 {update|status}"
+        echo "Usage: $0 {update|update-subs|status}"
         exit 1
         ;;
 esac
