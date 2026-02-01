@@ -103,12 +103,12 @@ return view.extend({
 		});
 		
 		// Build outbound options
-		var outboundOptions = [{ tag: '', name: _('Default (first tunnel)') }];
+		var outboundOptions = [{ tag: '', name: 'По умолчанию (первый туннель)' }];
 		tunnels.forEach(function(t) {
 			outboundOptions.push({ tag: t.tag, name: t.tag + ' (' + t.type + ')' });
 		});
 		groups.forEach(function(g) {
-			outboundOptions.push({ tag: g.tag, name: g.name + ' [' + (g.type === 'urltest' ? 'Auto' : 'Manual') + ']' });
+			outboundOptions.push({ tag: g.tag, name: g.name + ' [' + (g.type === 'urltest' ? 'Авто' : 'Ручной') + ']' });
 		});
 		
 		// Group services by category
@@ -123,9 +123,9 @@ return view.extend({
 		var enabledCount = services.filter(function(s) { return s.enabled; }).length;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
-			E('h2', {}, _('PinPoint Services')),
-			E('p', {}, _('Select services to route through VPN tunnel. ') +
-				_('Total: ') + services.length + ', ' + _('Enabled: ') + enabledCount)
+			E('h2', {}, 'Сервисы PinPoint'),
+			E('p', {}, 'Выберите сервисы для маршрутизации через VPN туннель. ' +
+				'Всего: ' + services.length + ', Включено: ' + enabledCount)
 		]);
 		
 		// Search and filter bar
@@ -134,7 +134,7 @@ return view.extend({
 				'type': 'text',
 				'id': 'service-search',
 				'class': 'cbi-input-text',
-				'placeholder': _('Search services...'),
+				'placeholder': 'Поиск сервисов...',
 				'style': 'flex: 1; min-width: 200px;',
 				'input': ui.createHandlerFn(self, function(ev) {
 					var search = ev.target.value;
@@ -152,7 +152,7 @@ return view.extend({
 					self.filterServices(search, cat);
 				})
 			}, [
-				E('option', { 'value': 'all' }, _('All categories'))
+				E('option', { 'value': 'all' }, 'Все категории')
 			].concat(Object.keys(categories).sort().map(function(c) {
 				return E('option', { 'value': c }, categories[c] + ' (' + (byCategory[c] ? byCategory[c].length : 0) + ')');
 			})))
@@ -172,15 +172,15 @@ return view.extend({
 						if (btn && btn.getAttribute('data-enabled') !== '1') {
 							promises.push(callSetService(btn.getAttribute('data-service'), true));
 							btn.setAttribute('data-enabled', '1');
-							btn.textContent = _('ON');
+							btn.textContent = 'ВКЛ';
 							btn.className = 'btn cbi-button cbi-button-positive';
 						}
 					});
 					if (promises.length > 0) {
-						ui.addNotification(null, E('p', _('Enabled ') + promises.length + _(' services')), 'info');
+						ui.addNotification(null, E('p', 'Включено ' + promises.length + ' сервисов'), 'info');
 					}
 				})
-			}, _('Enable Visible')),
+			}, 'Включить видимые'),
 			E('button', {
 				'class': 'btn cbi-button cbi-button-neutral',
 				'click': ui.createHandlerFn(self, function() {
@@ -191,15 +191,15 @@ return view.extend({
 						if (btn && btn.getAttribute('data-enabled') === '1') {
 							promises.push(callSetService(btn.getAttribute('data-service'), false));
 							btn.setAttribute('data-enabled', '0');
-							btn.textContent = _('OFF');
+							btn.textContent = 'ВЫКЛ';
 							btn.className = 'btn cbi-button cbi-button-neutral';
 						}
 					});
 					if (promises.length > 0) {
-						ui.addNotification(null, E('p', _('Disabled ') + promises.length + _(' services')), 'info');
+						ui.addNotification(null, E('p', 'Отключено ' + promises.length + ' сервисов'), 'info');
 					}
 				})
-			}, _('Disable Visible'))
+			}, 'Выключить видимые')
 		]));
 		
 		// Create category sections
@@ -215,10 +215,10 @@ return view.extend({
 			
 			var table = E('div', { 'class': 'table cbi-section-table' }, [
 				E('div', { 'class': 'tr table-titles' }, [
-					E('div', { 'class': 'th' }, _('Service')),
-					E('div', { 'class': 'th' }, _('Domains')),
-					E('div', { 'class': 'th', 'style': 'width:150px' }, _('Route via')),
-					E('div', { 'class': 'th', 'style': 'width:80px' }, _('Status'))
+					E('div', { 'class': 'th' }, 'Сервис'),
+					E('div', { 'class': 'th' }, 'Домены'),
+					E('div', { 'class': 'th', 'style': 'width:150px' }, 'Через'),
+					E('div', { 'class': 'th', 'style': 'width:80px' }, 'Статус')
 				])
 			]);
 			
@@ -253,7 +253,7 @@ return view.extend({
 								
 								callSetServiceRoute(serviceId, outbound).then(function(result) {
 									if (result.success) {
-										ui.addNotification(null, E('p', _('Route updated')), 'success');
+										ui.addNotification(null, E('p', 'Маршрут обновлён'), 'success');
 									}
 								});
 							})
@@ -282,17 +282,17 @@ return view.extend({
 								return callSetService(serviceId, newState).then(function(result) {
 									if (result.success) {
 										btn.setAttribute('data-enabled', newState ? '1' : '0');
-										btn.textContent = newState ? _('ON') : _('OFF');
+										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
 									}
 									btn.disabled = false;
 								}).catch(function(e) {
-									ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 									btn.disabled = false;
-									btn.textContent = currentState ? _('ON') : _('OFF');
+									btn.textContent = currentState ? 'ВКЛ' : 'ВЫКЛ';
 								});
 							})
-						}, service.enabled ? _('ON') : _('OFF'))
+						}, service.enabled ? 'ВКЛ' : 'ВЫКЛ')
 					])
 				]);
 				
@@ -308,19 +308,19 @@ return view.extend({
 			E('button', {
 				'class': 'btn cbi-button cbi-button-apply',
 				'click': ui.createHandlerFn(this, function() {
-					ui.showModal(_('Applying...'), [
-						E('p', { 'class': 'spinning' }, _('Updating routing rules...'))
+					ui.showModal('Применение...', [
+						E('p', { 'class': 'spinning' }, 'Обновление правил маршрутизации...')
 					]);
 					
 					return callApply().then(function() {
 						ui.hideModal();
-						ui.addNotification(null, E('p', _('Rules applied successfully')), 'success');
+						ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
 					}).catch(function(e) {
 						ui.hideModal();
-						ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+						ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 					});
 				})
-			}, _('Apply Changes'))
+			}, 'Применить изменения')
 		]));
 		
 		return view;

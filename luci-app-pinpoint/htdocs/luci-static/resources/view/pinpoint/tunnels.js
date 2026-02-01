@@ -109,12 +109,12 @@ return view.extend({
 		var self = this;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
-			E('h2', {}, _('VPN Tunnels')),
-			E('p', {}, _('Manage VPN subscriptions, import links, select active tunnel, and configure server groups.'))
+			E('h2', {}, 'VPN Туннели'),
+			E('p', {}, 'Управление подписками, импорт ссылок, выбор активного туннеля и настройка групп серверов.')
 		]);
 		
 		// ===== IMPORT SECTION WITH TABS =====
-		view.appendChild(E('h3', {}, _('Add VPN Configuration')));
+		view.appendChild(E('h3', {}, 'Добавить VPN конфигурацию'));
 		
 		var importSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' })
@@ -134,7 +134,7 @@ return view.extend({
 					document.getElementById('tab-subscription').style.borderBottom = 'none';
 					document.getElementById('tab-subscription').style.fontWeight = 'normal';
 				}
-			}, _('Import Link')),
+			}, 'Импорт ссылки'),
 			E('button', {
 				'id': 'tab-subscription',
 				'class': 'btn',
@@ -147,7 +147,7 @@ return view.extend({
 					document.getElementById('tab-subscription').style.borderBottom = '2px solid #3b82f6';
 					document.getElementById('tab-subscription').style.fontWeight = 'bold';
 				}
-			}, _('Subscription'))
+			}, 'Подписка')
 		]);
 		
 		importSection.querySelector('.cbi-section-node').appendChild(tabContainer);
@@ -155,7 +155,7 @@ return view.extend({
 		// Link import form
 		var linkForm = E('div', { 'id': 'form-link', 'style': 'display: block;' }, [
 			E('p', { 'style': 'color: #666; margin-bottom: 10px;' }, 
-				_('Paste one or more VPN links (vless://, vmess://, ss://, trojan://, hysteria2://). One link per line.')),
+				'Вставьте одну или несколько VPN ссылок (vless://, vmess://, ss://, trojan://, hysteria2://). По одной ссылке на строку.'),
 			E('textarea', {
 				'id': 'import-links',
 				'class': 'cbi-input-textarea',
@@ -170,7 +170,7 @@ return view.extend({
 						var text = textarea.value.trim();
 						
 						if (!text) {
-							ui.addNotification(null, E('p', _('Please paste VPN links')), 'warning');
+							ui.addNotification(null, E('p', 'Вставьте VPN ссылки'), 'warning');
 							return;
 						}
 						
@@ -179,12 +179,12 @@ return view.extend({
 						});
 						
 						if (links.length === 0) {
-							ui.addNotification(null, E('p', _('No valid links found')), 'warning');
+							ui.addNotification(null, E('p', 'Не найдено валидных ссылок'), 'warning');
 							return;
 						}
 						
-						ui.showModal(_('Importing...'), [
-							E('p', { 'class': 'spinning' }, _('Parsing and importing ') + links.length + _(' link(s)...'))
+						ui.showModal('Импорт...', [
+							E('p', { 'class': 'spinning' }, 'Парсинг и импорт ' + links.length + ' ссылок...')
 						]);
 						
 						var promise;
@@ -198,10 +198,10 @@ return view.extend({
 							ui.hideModal();
 							if (result.success) {
 								var msg = links.length === 1 
-									? _('Imported: ') + (result.tag || '1 tunnel')
-									: _('Imported: ') + result.count + _(' tunnels');
+									? 'Импортировано: ' + (result.tag || '1 туннель')
+									: 'Импортировано: ' + result.count + ' туннелей';
 								if (result.failed && result.failed.length > 0) {
-									msg += '\n' + _('Failed: ') + result.failed.length;
+									msg += '\nОшибок: ' + result.failed.length;
 								}
 								ui.addNotification(null, E('p', msg), 'success');
 								textarea.value = '';
@@ -211,14 +211,14 @@ return view.extend({
 									window.location.reload();
 								});
 							} else {
-								ui.addNotification(null, E('p', result.error || _('Import failed')), 'danger');
+								ui.addNotification(null, E('p', result.error || 'Ошибка импорта'), 'danger');
 							}
 						}).catch(function(e) {
 							ui.hideModal();
-							ui.addNotification(null, E('p', _('Error: ') + e.message), 'danger');
+							ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
 						});
 					})
-				}, _('Import Links'))
+				}, 'Импортировать')
 			])
 		]);
 		
@@ -227,20 +227,20 @@ return view.extend({
 		// Subscription form
 		var subForm = E('div', { 'id': 'form-subscription', 'style': 'display: none;' }, [
 			E('p', { 'style': 'color: #666; margin-bottom: 10px;' }, 
-				_('Add a subscription URL. Supports Base64, Clash YAML, and sing-box JSON formats.')),
+				'Добавьте URL подписки. Поддерживаются форматы Base64, Clash YAML и sing-box JSON.'),
 			E('div', { 'style': 'display: flex; gap: 10px; flex-wrap: wrap;' }, [
 				E('input', {
 					'type': 'text',
 					'id': 'sub-name',
 					'class': 'cbi-input-text',
-					'placeholder': _('Name (optional)'),
+					'placeholder': 'Название (опционально)',
 					'style': 'width: 150px;'
 				}),
 				E('input', {
 					'type': 'text',
 					'id': 'sub-url',
 					'class': 'cbi-input-text',
-					'placeholder': _('Subscription URL'),
+					'placeholder': 'URL подписки',
 					'style': 'flex: 1; min-width: 300px;'
 				}),
 				E('button', {
@@ -250,25 +250,25 @@ return view.extend({
 						var url = document.getElementById('sub-url').value;
 						
 						if (!url) {
-							ui.addNotification(null, E('p', _('Please enter subscription URL')), 'warning');
+							ui.addNotification(null, E('p', 'Введите URL подписки'), 'warning');
 							return;
 						}
 						
-						ui.showModal(_('Adding...'), [
-							E('p', { 'class': 'spinning' }, _('Adding subscription...'))
+						ui.showModal('Добавление...', [
+							E('p', { 'class': 'spinning' }, 'Добавление подписки...')
 						]);
 						
 						return callAddSubscription(url, name).then(function(result) {
 							ui.hideModal();
 							if (result.success) {
-								ui.addNotification(null, E('p', _('Subscription added')), 'success');
+								ui.addNotification(null, E('p', 'Подписка добавлена'), 'success');
 								window.location.reload();
 							} else {
-								ui.addNotification(null, E('p', result.error || _('Failed to add')), 'danger');
+								ui.addNotification(null, E('p', result.error || 'Ошибка добавления'), 'danger');
 							}
 						});
 					})
-				}, _('Add'))
+				}, 'Добавить')
 			])
 		]);
 		
@@ -276,7 +276,7 @@ return view.extend({
 		view.appendChild(importSection);
 		
 		// ===== SUBSCRIPTIONS SECTION =====
-		view.appendChild(E('h3', {}, _('Subscriptions') + ' (' + subscriptions.length + ')'));
+		view.appendChild(E('h3', {}, 'Подписки (' + subscriptions.length + ')'));
 		
 		var subSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' })
@@ -285,44 +285,44 @@ return view.extend({
 		if (subscriptions.length === 0) {
 			subSection.querySelector('.cbi-section-node').appendChild(
 				E('p', { 'style': 'text-align: center; color: #666; padding: 20px;' },
-					_('No subscriptions configured.'))
+					'Подписки не настроены.')
 			);
 		} else {
 			var subTable = E('div', { 'class': 'table' }, [
 				E('div', { 'class': 'tr table-titles' }, [
-					E('div', { 'class': 'th' }, _('Name')),
-					E('div', { 'class': 'th' }, _('URL')),
-					E('div', { 'class': 'th' }, _('Nodes')),
-					E('div', { 'class': 'th' }, _('Updated')),
-					E('div', { 'class': 'th', 'style': 'width: 80px;' }, _('Actions'))
+					E('div', { 'class': 'th' }, 'Название'),
+					E('div', { 'class': 'th' }, 'URL'),
+					E('div', { 'class': 'th' }, 'Ноды'),
+					E('div', { 'class': 'th' }, 'Обновлено'),
+					E('div', { 'class': 'th', 'style': 'width: 80px;' }, 'Действия')
 				])
 			]);
 			
 			subscriptions.forEach(function(sub) {
 				subTable.appendChild(E('div', { 'class': 'tr', 'data-sub-id': sub.id }, [
-					E('div', { 'class': 'td' }, sub.name || 'Subscription'),
+					E('div', { 'class': 'td' }, sub.name || 'Подписка'),
 					E('div', { 'class': 'td' }, [
 						E('code', { 'style': 'font-size: 11px; word-break: break-all;' }, 
 							(sub.url || '').substring(0, 40) + '...')
 					]),
 					E('div', { 'class': 'td' }, sub.nodes || 0),
-					E('div', { 'class': 'td' }, sub.updated || _('Never')),
+					E('div', { 'class': 'td' }, sub.updated || 'Никогда'),
 					E('div', { 'class': 'td' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
-							'title': _('Delete'),
+							'title': 'Удалить',
 							'data-id': sub.id,
 							'click': ui.createHandlerFn(self, function(ev) {
 								var id = ev.target.getAttribute('data-id');
-								if (!confirm(_('Delete this subscription?'))) return;
+								if (!confirm('Удалить эту подписку?')) return;
 								
 								return callDeleteSubscription(id).then(function(result) {
 									if (result.success) {
 										var row = document.querySelector('[data-sub-id="' + id + '"]');
 										if (row) row.remove();
-										ui.addNotification(null, E('p', _('Subscription deleted')), 'success');
+										ui.addNotification(null, E('p', 'Подписка удалена'), 'success');
 									} else {
-										ui.addNotification(null, E('p', result.error || _('Delete failed')), 'danger');
+										ui.addNotification(null, E('p', result.error || 'Ошибка удаления'), 'danger');
 									}
 								});
 							})
@@ -337,7 +337,7 @@ return view.extend({
 		view.appendChild(subSection);
 		
 		// ===== TUNNELS SECTION =====
-		view.appendChild(E('h3', {}, _('Available Tunnels') + ' (' + tunnels.length + ')'));
+		view.appendChild(E('h3', {}, 'Доступные туннели (' + tunnels.length + ')'));
 		
 		var tunnelSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' })
@@ -346,17 +346,17 @@ return view.extend({
 		if (tunnels.length === 0) {
 			tunnelSection.querySelector('.cbi-section-node').appendChild(
 				E('p', { 'style': 'text-align: center; color: #666; padding: 20px;' },
-					_('No tunnels configured. Import a link or add a subscription above.'))
+					'Туннели не настроены. Импортируйте ссылку или добавьте подписку выше.')
 			);
 		} else {
 			var tunnelTable = E('div', { 'class': 'table' }, [
 				E('div', { 'class': 'tr table-titles' }, [
 					E('div', { 'class': 'th', 'style': 'width: 50px;' }, ''),
-					E('div', { 'class': 'th' }, _('Name')),
-					E('div', { 'class': 'th' }, _('Type')),
-					E('div', { 'class': 'th' }, _('Server')),
-					E('div', { 'class': 'th' }, _('Latency')),
-					E('div', { 'class': 'th', 'style': 'width: 80px;' }, _('Actions'))
+					E('div', { 'class': 'th' }, 'Название'),
+					E('div', { 'class': 'th' }, 'Тип'),
+					E('div', { 'class': 'th' }, 'Сервер'),
+					E('div', { 'class': 'th' }, 'Задержка'),
+					E('div', { 'class': 'th', 'style': 'width: 80px;' }, 'Действия')
 				])
 			]);
 			
@@ -376,20 +376,20 @@ return view.extend({
 							'change': ui.createHandlerFn(self, function(ev) {
 								var tag = ev.target.value;
 								
-								ui.showModal(_('Switching...'), [
-									E('p', { 'class': 'spinning' }, _('Activating tunnel...'))
+								ui.showModal('Переключение...', [
+									E('p', { 'class': 'spinning' }, 'Активация туннеля...')
 								]);
 								
 								return callSetActiveTunnel(tag).then(function(result) {
 									if (result.success) {
 										return callRestart().then(function() {
 											ui.hideModal();
-											ui.addNotification(null, E('p', _('Active tunnel changed to: ') + tag), 'success');
+											ui.addNotification(null, E('p', 'Активный туннель изменён на: ' + tag), 'success');
 											window.location.reload();
 										});
 									} else {
 										ui.hideModal();
-										ui.addNotification(null, E('p', result.error || _('Failed')), 'danger');
+										ui.addNotification(null, E('p', result.error || 'Ошибка'), 'danger');
 									}
 								});
 							})
@@ -406,14 +406,14 @@ return view.extend({
 					E('div', { 'class': 'td' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
-							'title': _('Delete'),
+							'title': 'Удалить',
 							'data-tag': tunnel.tag,
 							'click': ui.createHandlerFn(self, function(ev) {
 								var tag = ev.target.getAttribute('data-tag');
-								if (!confirm(_('Delete tunnel "') + tag + '"?')) return;
+								if (!confirm('Удалить туннель "' + tag + '"?')) return;
 								
-								ui.showModal(_('Deleting...'), [
-									E('p', { 'class': 'spinning' }, _('Removing tunnel...'))
+								ui.showModal('Удаление...', [
+									E('p', { 'class': 'spinning' }, 'Удаление туннеля...')
 								]);
 								
 								return callDeleteTunnel(tag).then(function(result) {
@@ -421,12 +421,12 @@ return view.extend({
 									if (result.success) {
 										var row = document.querySelector('[data-tunnel-tag="' + tag + '"]');
 										if (row) row.remove();
-										ui.addNotification(null, E('p', _('Tunnel deleted')), 'success');
+										ui.addNotification(null, E('p', 'Туннель удалён'), 'success');
 										
 										// Restart sing-box
 										return callRestart();
 									} else {
-										ui.addNotification(null, E('p', result.error || _('Delete failed')), 'danger');
+										ui.addNotification(null, E('p', result.error || 'Ошибка удаления'), 'danger');
 									}
 								});
 							})
@@ -441,7 +441,7 @@ return view.extend({
 		view.appendChild(tunnelSection);
 		
 		// ===== GROUPS SECTION =====
-		view.appendChild(E('h3', {}, _('Server Groups') + ' (' + groups.length + ')'));
+		view.appendChild(E('h3', {}, 'Группы серверов (' + groups.length + ')'));
 		
 		var groupSection = E('div', { 'class': 'cbi-section' }, [
 			E('div', { 'class': 'cbi-section-node' })
@@ -449,32 +449,32 @@ return view.extend({
 		
 		// Add group form
 		var addGroupForm = E('div', { 'style': 'margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;' }, [
-			E('strong', { 'style': 'display: block; margin-bottom: 10px;' }, _('Create New Group')),
+			E('strong', { 'style': 'display: block; margin-bottom: 10px;' }, 'Создать новую группу'),
 			E('div', { 'style': 'display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;' }, [
 				E('div', {}, [
-					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Name')),
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, 'Название'),
 					E('input', {
 						'type': 'text',
 						'id': 'group-name',
 						'class': 'cbi-input-text',
-						'placeholder': _('My Group'),
+						'placeholder': 'Моя группа',
 						'style': 'width: 150px;'
 					})
 				]),
 				E('div', {}, [
-					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Type')),
-					E('select', { 'id': 'group-type', 'class': 'cbi-input-select', 'style': 'width: 120px;' }, [
-						E('option', { 'value': 'urltest' }, _('Auto (urltest)')),
-						E('option', { 'value': 'selector' }, _('Manual (selector)'))
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, 'Тип'),
+					E('select', { 'id': 'group-type', 'class': 'cbi-input-select', 'style': 'width: 150px;' }, [
+						E('option', { 'value': 'urltest' }, 'Авто (urltest)'),
+						E('option', { 'value': 'selector' }, 'Ручной (selector)')
 					])
 				]),
 				E('div', {}, [
-					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, _('Interval')),
+					E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 2px;' }, 'Интервал'),
 					E('select', { 'id': 'group-interval', 'class': 'cbi-input-select', 'style': 'width: 100px;' }, [
-						E('option', { 'value': '1m' }, '1 min'),
-						E('option', { 'value': '5m', 'selected': true }, '5 min'),
-						E('option', { 'value': '10m' }, '10 min'),
-						E('option', { 'value': '30m' }, '30 min')
+						E('option', { 'value': '1m' }, '1 мин'),
+						E('option', { 'value': '5m', 'selected': true }, '5 мин'),
+						E('option', { 'value': '10m' }, '10 мин'),
+						E('option', { 'value': '30m' }, '30 мин')
 					])
 				]),
 				E('button', {
@@ -485,7 +485,7 @@ return view.extend({
 						var interval = document.getElementById('group-interval').value;
 						
 						if (!name) {
-							ui.addNotification(null, E('p', _('Please enter group name')), 'warning');
+							ui.addNotification(null, E('p', 'Введите название группы'), 'warning');
 							return;
 						}
 						
@@ -497,30 +497,30 @@ return view.extend({
 						});
 						
 						if (outbounds.length < 2) {
-							ui.addNotification(null, E('p', _('Select at least 2 tunnels')), 'warning');
+							ui.addNotification(null, E('p', 'Выберите минимум 2 туннеля'), 'warning');
 							return;
 						}
 						
-						ui.showModal(_('Creating...'), [
-							E('p', { 'class': 'spinning' }, _('Creating group...'))
+						ui.showModal('Создание...', [
+							E('p', { 'class': 'spinning' }, 'Создание группы...')
 						]);
 						
 						return callAddGroup(name, type, outbounds, interval).then(function(result) {
 							ui.hideModal();
 							if (result.success) {
-								ui.addNotification(null, E('p', _('Group created')), 'success');
+								ui.addNotification(null, E('p', 'Группа создана'), 'success');
 								return callRestart().then(function() {
 									window.location.reload();
 								});
 							} else {
-								ui.addNotification(null, E('p', result.error || _('Failed')), 'danger');
+								ui.addNotification(null, E('p', result.error || 'Ошибка'), 'danger');
 							}
 						});
 					})
-				}, _('Create Group'))
+				}, 'Создать группу')
 			]),
 			E('div', { 'style': 'margin-top: 10px;' }, [
-				E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 5px;' }, _('Select tunnels for group:')),
+				E('label', { 'style': 'display: block; font-size: 12px; margin-bottom: 5px;' }, 'Выберите туннели для группы:'),
 				E('div', { 'id': 'group-tunnels-select', 'style': 'display: flex; flex-wrap: wrap; gap: 10px;' },
 					tunnels.map(function(t) {
 						return E('label', { 'style': 'display: flex; align-items: center; gap: 4px; cursor: pointer;' }, [
@@ -542,11 +542,11 @@ return view.extend({
 		if (groups.length > 0) {
 			var groupTable = E('div', { 'class': 'table', 'style': 'margin-top: 15px;' }, [
 				E('div', { 'class': 'tr table-titles' }, [
-					E('div', { 'class': 'th' }, _('Name')),
-					E('div', { 'class': 'th' }, _('Type')),
-					E('div', { 'class': 'th' }, _('Servers')),
-					E('div', { 'class': 'th' }, _('Interval')),
-					E('div', { 'class': 'th', 'style': 'width: 80px;' }, _('Actions'))
+					E('div', { 'class': 'th' }, 'Название'),
+					E('div', { 'class': 'th' }, 'Тип'),
+					E('div', { 'class': 'th' }, 'Серверы'),
+					E('div', { 'class': 'th' }, 'Интервал'),
+					E('div', { 'class': 'th', 'style': 'width: 80px;' }, 'Действия')
 				])
 			]);
 			
@@ -555,26 +555,26 @@ return view.extend({
 					E('div', { 'class': 'td' }, [
 						E('strong', {}, g.name || g.tag)
 					]),
-					E('div', { 'class': 'td' }, g.type === 'urltest' ? _('Auto') : _('Manual')),
-					E('div', { 'class': 'td' }, (g.outbounds || []).length + ' ' + _('servers')),
+					E('div', { 'class': 'td' }, g.type === 'urltest' ? 'Авто' : 'Ручной'),
+					E('div', { 'class': 'td' }, (g.outbounds || []).length + ' серверов'),
 					E('div', { 'class': 'td' }, g.interval || '-'),
 					E('div', { 'class': 'td' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
-							'title': _('Delete'),
+							'title': 'Удалить',
 							'data-id': g.id,
 							'click': ui.createHandlerFn(self, function(ev) {
 								var id = ev.target.getAttribute('data-id');
-								if (!confirm(_('Delete this group?'))) return;
+								if (!confirm('Удалить эту группу?')) return;
 								
 								return callDeleteGroup(id).then(function(result) {
 									if (result.success) {
 										var row = document.querySelector('[data-group-id="' + id + '"]');
 										if (row) row.remove();
-										ui.addNotification(null, E('p', _('Group deleted')), 'success');
+										ui.addNotification(null, E('p', 'Группа удалена'), 'success');
 										return callRestart();
 									} else {
-										ui.addNotification(null, E('p', result.error || _('Delete failed')), 'danger');
+										ui.addNotification(null, E('p', result.error || 'Ошибка удаления'), 'danger');
 									}
 								});
 							})
@@ -593,28 +593,28 @@ return view.extend({
 			E('button', {
 				'class': 'btn cbi-button cbi-button-action',
 				'click': ui.createHandlerFn(self, function() {
-					ui.showModal(_('Updating...'), [
-						E('p', { 'class': 'spinning' }, _('Updating subscriptions...'))
+					ui.showModal('Обновление...', [
+						E('p', { 'class': 'spinning' }, 'Обновление подписок...')
 					]);
 					
 					return callUpdateSubscriptions().then(function(result) {
 						ui.hideModal();
 						if (result.success) {
-							ui.addNotification(null, E('p', _('Subscriptions updated')), 'success');
+							ui.addNotification(null, E('p', 'Подписки обновлены'), 'success');
 							window.location.reload();
 						} else {
-							ui.addNotification(null, E('p', result.error || _('Update failed')), 'danger');
+							ui.addNotification(null, E('p', result.error || 'Ошибка обновления'), 'danger');
 						}
 					});
 				})
-			}, _('Update Subscriptions')),
+			}, 'Обновить подписки'),
 			
 			E('button', {
 				'class': 'btn cbi-button cbi-button-action',
 				'style': 'margin-left: 10px;',
 				'click': ui.createHandlerFn(self, function() {
-					ui.showModal(_('Testing...'), [
-						E('p', { 'class': 'spinning' }, _('Running health check...'))
+					ui.showModal('Тестирование...', [
+						E('p', { 'class': 'spinning' }, 'Проверка доступности...')
 					]);
 					
 					return callHealthCheck().then(function(result) {
@@ -623,25 +623,25 @@ return view.extend({
 							result.results.forEach(function(r) {
 								var el = document.querySelector('[data-tunnel="' + r.tag + '"]');
 								if (el) {
-									el.textContent = r.latency ? r.latency + ' ms' : 'timeout';
+									el.textContent = r.latency ? r.latency + ' мс' : 'таймаут';
 									el.style.color = r.latency && r.latency < 200 ? '#22c55e' : '#ef4444';
 								}
 							});
-							ui.addNotification(null, E('p', _('Health check completed')), 'success');
+							ui.addNotification(null, E('p', 'Проверка завершена'), 'success');
 						}
 					});
 				})
-			}, _('Health Check')),
+			}, 'Проверить'),
 			
 			E('button', {
 				'class': 'btn cbi-button cbi-button-neutral',
 				'style': 'margin-left: 10px;',
 				'click': ui.createHandlerFn(self, function() {
 					return callRestart().then(function() {
-						ui.addNotification(null, E('p', _('VPN restarted')), 'success');
+						ui.addNotification(null, E('p', 'VPN перезапущен'), 'success');
 					});
 				})
-			}, _('Restart VPN'))
+			}, 'Перезапустить VPN')
 		]));
 		
 		return view;
