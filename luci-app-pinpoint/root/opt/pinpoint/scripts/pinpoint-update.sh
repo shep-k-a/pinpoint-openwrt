@@ -119,6 +119,22 @@ load_nftables() {
         done < "$f"
     done
     
+    # Always add essential Meta/Instagram IP ranges
+    # These are critical because ISP DNS hijacking may return CDN IPs
+    for cidr in \
+        "31.13.24.0/21" \
+        "31.13.64.0/18" \
+        "157.240.0.0/16" \
+        "179.60.192.0/22" \
+        "185.60.216.0/22" \
+        "66.220.144.0/20" \
+        "69.63.176.0/20" \
+        "69.171.224.0/19" \
+        "129.134.0.0/16" \
+        "147.75.208.0/20"; do
+        nft add element inet pinpoint tunnel_nets "{ $cidr }" 2>/dev/null && loaded=$((loaded + 1))
+    done
+    
     log "Loaded $loaded CIDRs to nftables"
 }
 

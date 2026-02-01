@@ -1166,6 +1166,33 @@ HOTPLUGIFACE
 }
 
 # ============================================
+# Cron Jobs (periodic updates)
+# ============================================
+install_cron_jobs() {
+    step "Installing periodic update cron job..."
+    
+    mkdir -p /etc/cron.d
+    
+    # Create cron job for periodic list updates
+    cat > /etc/cron.d/pinpoint << 'CRONEOF'
+# Pinpoint - Periodic list updates (every 6 hours)
+0 */6 * * * root /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1
+CRONEOF
+    
+    # Also add to crontab if cron.d not supported
+    if [ -f /etc/crontabs/root ]; then
+        if ! grep -q "pinpoint-update" /etc/crontabs/root 2>/dev/null; then
+            echo "0 */6 * * * /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1" >> /etc/crontabs/root
+        fi
+    fi
+    
+    # Restart cron if running
+    /etc/init.d/cron restart 2>/dev/null || true
+    
+    info "Cron job installed (updates every 6 hours)"
+}
+
+# ============================================
 # sing-box Configuration
 # ============================================
 create_singbox_config() {
@@ -1680,6 +1707,7 @@ main() {
         install_luci_app
         create_routing_scripts
         install_hotplug_scripts
+        install_cron_jobs
         setup_firewall
         cleanup_install
         print_success_lite
@@ -1696,6 +1724,7 @@ main() {
         create_init_script
         create_routing_scripts
         install_hotplug_scripts
+        install_cron_jobs
         create_singbox_config
         setup_firewall
         start_service

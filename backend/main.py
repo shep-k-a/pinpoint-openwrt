@@ -2492,10 +2492,10 @@ async def get_health():
     vpn_ip = None
     
     if vpn_configured:
-        # Try curl first
+        # Try curl first (use -4 to force IPv4, api.ipify.org is more reliable)
         success, output = run_command([
-            "curl", "-s", "--max-time", "5", "--interface", "tun1",
-            "http://ifconfig.me"
+            "curl", "-4", "-s", "--max-time", "5", "--interface", "tun1",
+            "https://api.ipify.org"
         ], timeout=8)
         
         if success and output.strip():

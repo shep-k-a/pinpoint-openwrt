@@ -38,3 +38,24 @@ logs/
 # Temporary
 *.tmp
 *.bak
+
+# Development/debug scripts (local only)
+check_*.py
+fix_*.py
+debug_*.py
+diagnose_*.py
+upload_*.py
+trace_*.py
+verify_*.py
+ssh_*.py
+patch_*.py
+copy_*.py
+create_*.py
+install_*.py
+run_*.py
+regen_*.py
+toggle_*.py
+update_*.py
+simple_*.py
+final_*.py
+singbox_config_fixed.json

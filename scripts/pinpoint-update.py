@@ -385,6 +385,33 @@ def load_nftables_sets():
                         if result.returncode == 0:
                             loaded += 1
     
+    # Always add essential Meta/Instagram IP ranges as fallback
+    # These are critical because ISP DNS hijacking returns CDN IPs that don't work through VPN
+    essential_ranges = [
+        "31.13.24.0/21",      # Facebook
+        "31.13.64.0/18",      # Facebook/Instagram
+        "157.240.0.0/16",     # Meta
+        "179.60.192.0/22",    # Meta
+        "185.60.216.0/22",    # Meta
+        "66.220.144.0/20",    # Facebook
+        "69.63.176.0/20",     # Facebook
+        "69.171.224.0/19",    # Facebook
+        "74.119.76.0/22",     # Facebook
+        "102.132.96.0/20",    # Meta
+        "129.134.0.0/16",     # Meta
+        "147.75.208.0/20",    # Meta
+        "163.70.128.0/17",    # Meta
+    ]
+    
+    for cidr in essential_ranges:
+        result = subprocess.run(
+            ["nft", "add", "element", "inet", "pinpoint", 
+             "tunnel_nets", "{", cidr, "}"],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            loaded += 1
+    
     log(f"Loaded {loaded} CIDRs to nftables")
 
 def restart_dnsmasq():
