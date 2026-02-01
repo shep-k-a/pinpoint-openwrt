@@ -258,21 +258,32 @@ def generate_dnsmasq_config():
         ""
     ]
     
+    # Track which services are enabled
+    enabled_service_ids = set()
+    if SERVICES_FILE.exists():
+        with open(SERVICES_FILE) as f:
+            data = json.load(f)
+        for service in data.get('services', []):
+            if service.get('enabled', False):
+                enabled_service_ids.add(service.get('id', ''))
+    
     for domain in sorted(all_domains):
         if domain:
             config_lines.append(f"nftset=/{domain}/4#inet#pinpoint#tunnel_ips")
     
     # Block IPv6 for YouTube/Google Video domains to force IPv4
-    # This ensures traffic goes through our IPv4 tunnel
-    youtube_domains = [
-        "googlevideo.com", "youtube.com", "music.youtube.com", 
-        "ytimg.com", "ggpht.com", "youtubei.googleapis.com",
-        "wide-youtube.l.google.com", "youtube-ui.l.google.com"
-    ]
-    config_lines.append("")
-    config_lines.append("# Block IPv6 for YouTube to force IPv4 routing")
-    for domain in youtube_domains:
-        config_lines.append(f"address=/{domain}/::")
+    # ONLY if youtube or youtubemusic service is enabled
+    youtube_services = {'youtube', 'youtubemusic', 'googlevideo'}
+    if enabled_service_ids & youtube_services:
+        youtube_domains = [
+            "googlevideo.com", "youtube.com", "music.youtube.com", 
+            "ytimg.com", "ggpht.com", "youtubei.googleapis.com",
+            "wide-youtube.l.google.com", "youtube-ui.l.google.com"
+        ]
+        config_lines.append("")
+        config_lines.append("# Block IPv6 for YouTube to force IPv4 routing")
+        for domain in youtube_domains:
+            config_lines.append(f"address=/{domain}/::")
     
     # Write config
     DNSMASQ_CONF.parent.mkdir(parents=True, exist_ok=True)
