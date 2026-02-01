@@ -112,8 +112,9 @@ HEADER
 load_nftables() {
     log "Loading nftables sets..."
     
-    # Flush existing set
+    # Flush existing sets (clear old/stale IPs)
     nft flush set inet pinpoint tunnel_nets 2>/dev/null
+    nft flush set inet pinpoint tunnel_ips 2>/dev/null
     
     local loaded=0
     
