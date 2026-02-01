@@ -3937,6 +3937,11 @@ footer a {
     color: #fff;
 }
 
+.health-item .health-status.stopped {
+    background: #f59e0b;
+    color: #fff;
+}
+
 /* Top Devices List */
 .top-devices-list {
     display: flex;

@@ -2046,9 +2046,10 @@ async function loadHealth() {
         
         for (const [key, comp] of Object.entries(data.components)) {
             const isOk = ['running', 'up', 'ok'].includes(comp.status);
+            const isStopped = ['stopped', 'not running', 'inactive'].includes(comp.status);
             const isDisabled = comp.status === 'disabled';
-            let statusClass = isOk ? 'ok' : (isDisabled ? 'disabled' : 'error');
-            let statusText = isOk ? 'OK' : (isDisabled ? 'ВЫКЛ' : 'Ошибка');
+            let statusClass = isOk ? 'ok' : (isStopped ? 'stopped' : (isDisabled ? 'disabled' : 'error'));
+            let statusText = isOk ? 'OK' : (isStopped ? 'СТОП' : (isDisabled ? 'ВЫКЛ' : 'ОШИБКА'));
             
             html += `
                 <div class="health-item">
