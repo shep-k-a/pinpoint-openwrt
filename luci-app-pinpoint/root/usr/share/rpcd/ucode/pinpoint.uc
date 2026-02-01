@@ -1151,6 +1151,324 @@ function test_domain(params) {
 	};
 }
 
+// ===== SERVER GROUPS =====
+const GROUPS_FILE = DATA_DIR + '/groups.json';
+
+function get_groups() {
+	let data = read_json(GROUPS_FILE);
+	if (!data) {
+		return { groups: [] };
+	}
+	return { groups: data.groups || [] };
+}
+
+function add_group(params) {
+	let name = params.name;
+	let type = params.type || 'urltest';
+	let outbounds = params.outbounds || [];
+	let interval = params.interval || '5m';
+	
+	if (!name) {
+		return { error: 'Name is required' };
+	}
+	if (length(outbounds) < 2) {
+		return { error: 'At least 2 outbounds required' };
+	}
+	
+	let data = read_json(GROUPS_FILE);
+	if (!data) {
+		data = { groups: [] };
+	}
+	
+	let id = 'group_' + time();
+	let tag = replace(name, /[^a-zA-Z0-9_-]/g, '_');
+	
+	push(data.groups, {
+		id: id,
+		tag: tag,
+		name: name,
+		type: type,
+		outbounds: outbounds,
+		interval: interval,
+		enabled: true
+	});
+	
+	write_json(GROUPS_FILE, data);
+	
+	// Update sing-box config
+	apply_groups_to_config();
+	
+	return { success: true, id: id };
+}
+
+function delete_group(params) {
+	let id = params.id;
+	if (!id) {
+		return { error: 'Group ID required' };
+	}
+	
+	let data = read_json(GROUPS_FILE);
+	if (!data || !data.groups) {
+		return { error: 'No groups found' };
+	}
+	
+	let newGroups = [];
+	for (let g in data.groups) {
+		if (g.id != id) {
+			push(newGroups, g);
+		}
+	}
+	
+	data.groups = newGroups;
+	write_json(GROUPS_FILE, data);
+	
+	apply_groups_to_config();
+	
+	return { success: true };
+}
+
+function apply_groups_to_config() {
+	let groups = read_json(GROUPS_FILE);
+	let config = read_json('/etc/sing-box/config.json');
+	
+	if (!config) return;
+	if (!config.outbounds) config.outbounds = [];
+	
+	// Remove existing group outbounds
+	let newOutbounds = [];
+	for (let ob in config.outbounds) {
+		if (ob.type != 'urltest' && ob.type != 'selector') {
+			push(newOutbounds, ob);
+		}
+	}
+	
+	// Add groups
+	if (groups && groups.groups) {
+		for (let g in groups.groups) {
+			if (!g.enabled) continue;
+			
+			let group_ob = {
+				type: g.type,
+				tag: g.tag,
+				outbounds: g.outbounds
+			};
+			
+			if (g.type == 'urltest') {
+				group_ob.url = 'https://www.gstatic.com/generate_204';
+				group_ob.interval = g.interval || '5m';
+				group_ob.tolerance = 50;
+			}
+			
+			push(newOutbounds, group_ob);
+		}
+	}
+	
+	config.outbounds = newOutbounds;
+	write_json('/etc/sing-box/config.json', config);
+}
+
+// ===== SERVICE ROUTES =====
+const ROUTES_FILE = DATA_DIR + '/service_routes.json';
+
+function get_service_routes() {
+	let data = read_json(ROUTES_FILE);
+	if (!data) {
+		return { routes: [] };
+	}
+	return { routes: data.routes || [] };
+}
+
+function set_service_route(params) {
+	let service_id = params.service_id;
+	let outbound = params.outbound;  // tunnel tag or group tag
+	
+	if (!service_id) {
+		return { error: 'Service ID required' };
+	}
+	
+	let data = read_json(ROUTES_FILE);
+	if (!data) {
+		data = { routes: [] };
+	}
+	
+	// Update or add route
+	let found = false;
+	for (let i = 0; i < length(data.routes); i++) {
+		if (data.routes[i].service_id == service_id) {
+			if (outbound) {
+				data.routes[i].outbound = outbound;
+			} else {
+				// Remove route if outbound is empty (use default)
+				splice(data.routes, i, 1);
+			}
+			found = true;
+			break;
+		}
+	}
+	
+	if (!found && outbound) {
+		push(data.routes, {
+			service_id: service_id,
+			outbound: outbound
+		});
+	}
+	
+	write_json(ROUTES_FILE, data);
+	
+	return { success: true };
+}
+
+// ===== ADBLOCK =====
+
+function get_adblock_status() {
+	// Check if adblock hosts file exists
+	let hosts_file = '/tmp/dnsmasq.d/adblock.conf';
+	let exists = (stat(hosts_file) != null);
+	
+	// Check if enabled in settings
+	let settings = read_json(SETTINGS_FILE) || {};
+	let enabled = settings.adblock_enabled || false;
+	
+	// Count blocked domains
+	let count = 0;
+	if (exists) {
+		let content = readfile(hosts_file);
+		if (content) {
+			count = length(split(content, '\n'));
+		}
+	}
+	
+	return {
+		enabled: enabled,
+		active: exists,
+		blocked_domains: count,
+		last_update: settings.adblock_updated || null
+	};
+}
+
+function toggle_adblock(params) {
+	let enabled = params.enabled;
+	
+	let settings = read_json(SETTINGS_FILE) || {};
+	settings.adblock_enabled = !!enabled;
+	write_json(SETTINGS_FILE, settings);
+	
+	if (enabled) {
+		// Download and apply adblock list
+		update_adblock();
+	} else {
+		// Remove adblock file
+		unlink('/tmp/dnsmasq.d/adblock.conf');
+		run_cmd('/etc/init.d/dnsmasq restart 2>&1');
+	}
+	
+	return { success: true, enabled: !!enabled };
+}
+
+function update_adblock() {
+	let settings = read_json(SETTINGS_FILE) || {};
+	
+	if (!settings.adblock_enabled) {
+		return { error: 'AdBlock is disabled' };
+	}
+	
+	// Download adblock hosts
+	let sources = [
+		'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts',
+		'https://adaway.org/hosts.txt'
+	];
+	
+	let all_domains = {};
+	
+	for (let url in sources) {
+		let content = run_cmd('curl -s -L --max-time 30 "' + url + '" 2>/dev/null');
+		if (content) {
+			let lines = split(content, '\n');
+			for (let line in lines) {
+				line = trim(line);
+				if (!line || substr(line, 0, 1) == '#') continue;
+				
+				// Parse hosts format: 0.0.0.0 domain.com
+				let m = match(line, /^(?:0\.0\.0\.0|127\.0\.0\.1)\s+([a-zA-Z0-9.-]+)/);
+				if (m && m[1] != 'localhost') {
+					all_domains[m[1]] = true;
+				}
+			}
+		}
+	}
+	
+	// Generate dnsmasq config
+	let config_lines = ['# AdBlock - Auto-generated'];
+	for (let domain in all_domains) {
+		push(config_lines, 'address=/' + domain + '/');
+	}
+	
+	mkdir('/tmp/dnsmasq.d', 0755);
+	writefile('/tmp/dnsmasq.d/adblock.conf', join('\n', config_lines));
+	
+	settings.adblock_updated = trim(run_cmd('date "+%Y-%m-%d %H:%M"'));
+	write_json(SETTINGS_FILE, settings);
+	
+	run_cmd('/etc/init.d/dnsmasq restart 2>&1');
+	
+	return { success: true, count: length(keys(all_domains)) };
+}
+
+// ===== EXPORT/IMPORT =====
+
+function export_config() {
+	let export_data = {
+		version: '1.0',
+		exported: trim(run_cmd('date "+%Y-%m-%d %H:%M:%S"')),
+		services: read_json(SERVICES_FILE),
+		devices: read_json(DEVICES_FILE),
+		custom_services: read_json(CUSTOM_FILE),
+		subscriptions: read_json(SUBSCRIPTIONS_FILE),
+		groups: read_json(GROUPS_FILE),
+		service_routes: read_json(ROUTES_FILE),
+		settings: read_json(SETTINGS_FILE)
+	};
+	
+	return { success: true, data: export_data };
+}
+
+function import_config(params) {
+	let data = params.data;
+	
+	if (!data || !data.version) {
+		return { error: 'Invalid config data' };
+	}
+	
+	// Import each section if present
+	if (data.services) {
+		write_json(SERVICES_FILE, data.services);
+	}
+	if (data.devices) {
+		write_json(DEVICES_FILE, data.devices);
+	}
+	if (data.custom_services) {
+		write_json(CUSTOM_FILE, data.custom_services);
+	}
+	if (data.subscriptions) {
+		write_json(SUBSCRIPTIONS_FILE, data.subscriptions);
+	}
+	if (data.groups) {
+		write_json(GROUPS_FILE, data.groups);
+	}
+	if (data.service_routes) {
+		write_json(ROUTES_FILE, data.service_routes);
+	}
+	if (data.settings) {
+		write_json(SETTINGS_FILE, data.settings);
+	}
+	
+	// Apply changes
+	apply_groups_to_config();
+	apply();
+	
+	return { success: true, message: 'Config imported successfully' };
+}
+
 // RPC methods object
 const methods = {
 	status: {
@@ -1314,6 +1632,65 @@ const methods = {
 		args: { domain: 'domain' },
 		call: function(req) {
 			return test_domain(req.args);
+		}
+	},
+	// ===== GROUPS =====
+	groups: {
+		call: function() {
+			return get_groups();
+		}
+	},
+	add_group: {
+		args: { name: 'name', type: 'type', outbounds: [], interval: 'interval' },
+		call: function(req) {
+			return add_group(req.args);
+		}
+	},
+	delete_group: {
+		args: { id: 'id' },
+		call: function(req) {
+			return delete_group(req.args);
+		}
+	},
+	// ===== SERVICE ROUTES =====
+	service_routes: {
+		call: function() {
+			return get_service_routes();
+		}
+	},
+	set_service_route: {
+		args: { service_id: 'service_id', outbound: 'outbound' },
+		call: function(req) {
+			return set_service_route(req.args);
+		}
+	},
+	// ===== ADBLOCK =====
+	adblock_status: {
+		call: function() {
+			return get_adblock_status();
+		}
+	},
+	toggle_adblock: {
+		args: { enabled: true },
+		call: function(req) {
+			return toggle_adblock(req.args);
+		}
+	},
+	update_adblock: {
+		call: function() {
+			return update_adblock();
+		}
+	},
+	// ===== EXPORT/IMPORT =====
+	export_config: {
+		call: function() {
+			return export_config();
+		}
+	},
+	import_config: {
+		args: { data: {} },
+		call: function(req) {
+			return import_config(req.args);
 		}
 	}
 };

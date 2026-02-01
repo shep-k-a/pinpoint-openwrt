@@ -23,7 +23,11 @@
 					"health_check",
 					"get_logs",
 					"network_hosts",
-					"test_domain"
+					"test_domain",
+					"groups",
+					"service_routes",
+					"adblock_status",
+					"export_config"
 				]
 			}
 		},
@@ -32,7 +36,8 @@
 			"file": {
 				"/etc/config/pinpoint": ["write"],
 				"/opt/pinpoint/data/*": ["write"],
-				"/etc/sing-box/*": ["write"]
+				"/etc/sing-box/*": ["write"],
+				"/tmp/dnsmasq.d/*": ["write"]
 			},
 			"ubus": {
 				"luci.pinpoint": [
@@ -53,7 +58,13 @@
 					"edit_subscription",
 					"delete_tunnel",
 					"add_device",
-					"delete_device"
+					"delete_device",
+					"add_group",
+					"delete_group",
+					"set_service_route",
+					"toggle_adblock",
+					"update_adblock",
+					"import_config"
 				]
 			}
 		}
