@@ -38,6 +38,44 @@ function run_cmd(cmd) {
 	return out;
 }
 
+// Base64 decode (pure ucode implementation)
+function b64decode(str) {
+	if (!str) return null;
+	str = trim(str);
+	
+	// Base64 alphabet
+	let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+	let lookup = {};
+	for (let i = 0; i < 64; i++) {
+		lookup[substr(chars, i, 1)] = i;
+	}
+	
+	// Remove padding and non-base64 chars
+	str = replace(str, /[\r\n\s]/g, '');
+	str = replace(str, /=+$/, '');
+	
+	let result = '';
+	let buffer = 0;
+	let bits = 0;
+	
+	for (let i = 0; i < length(str); i++) {
+		let ch = substr(str, i, 1);
+		let val = lookup[ch];
+		if (val == null) continue;
+		
+		buffer = (buffer << 6) | val;
+		bits += 6;
+		
+		while (bits >= 8) {
+			bits -= 8;
+			let byte_val = (buffer >> bits) & 0xFF;
+			result += chr(byte_val);
+		}
+	}
+	
+	return result;
+}
+
 // Get VPN status
 function get_status() {
 	// Check if tun1 is up
@@ -291,7 +329,7 @@ function update_subscriptions() {
 	// For each subscription, download and parse
 	for (let i = 0; i < length(subs.subscriptions); i++) {
 		let sub = subs.subscriptions[i];
-		let content = run_cmd('curl -s -L --max-time 30 "' + sub.url + '" 2>/dev/null');
+		let content = run_cmd('wget -q -O - --timeout=30 "' + sub.url + '" 2>/dev/null');
 		
 		if (!content || trim(content) == '') {
 			continue;
@@ -300,9 +338,10 @@ function update_subscriptions() {
 		content = trim(content);
 		let links = [];
 		
-		// Try to decode as Base64 first
+		// Try to decode as Base64 first (content looks like base64 - no protocol prefix)
 		if (!match(content, /^[a-z]+:\/\//i) && !match(content, /^\{/) && !match(content, /^proxies:/)) {
-			let decoded = run_cmd('echo "' + content + '" | base64 -d 2>/dev/null');
+			// Use pure ucode base64 decoder (works without external tools)
+			let decoded = b64decode(content);
 			if (decoded && trim(decoded) != '') {
 				content = trim(decoded);
 			}
@@ -1381,7 +1420,7 @@ function update_adblock() {
 	let all_domains = {};
 	
 	for (let url in sources) {
-		let content = run_cmd('curl -s -L --max-time 30 "' + url + '" 2>/dev/null');
+		let content = run_cmd('wget -q -O - --timeout=30 "' + url + '" 2>/dev/null');
 		if (content) {
 			let lines = split(content, '\n');
 			for (let line in lines) {
