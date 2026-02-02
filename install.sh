@@ -524,14 +524,59 @@ install_singbox() {
     done
     
     # =============================================
-    # Method 4: OpenWRT official repository
+    # Method 4: SagerNet pinned version (fallback - direct download)
     # =============================================
-    step "Trying OpenWRT official repository..."
-    opkg_silent install sing-box
-    if command -v sing-box >/dev/null 2>&1; then
-        INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-        info "sing-box ${INSTALLED_VER:-unknown} installed from OpenWRT repo"
-        return 0
+    if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
+        step "Trying pinned sing-box v${SINGBOX_PINNED_VERSION} from GitHub..."
+        info "Will try variants: ${SAGERNET_ARCH_VARIANTS}"
+        
+        TMP_DIR="/tmp/singbox_install"
+        mkdir -p "$TMP_DIR"
+        
+        # Try all architecture variants for MIPS
+        TRIED_ARCHS=""
+        for ARCH_VARIANT in $SAGERNET_ARCH_VARIANTS; do
+            BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_PINNED_VERSION}/sing-box-${SINGBOX_PINNED_VERSION}-${ARCH_VARIANT}.tar.gz"
+            TRIED_ARCHS="$TRIED_ARCHS $ARCH_VARIANT"
+            
+            step "  Trying ${ARCH_VARIANT}..."
+            
+            # Check if URL is accessible first
+            if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
+                if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                    cd "$TMP_DIR"
+                    if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                        BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                        if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                            # Remove old version if exists
+                            rm -f /usr/bin/sing-box 2>/dev/null
+                            chmod +x "$BINARY_PATH"
+                            mv "$BINARY_PATH" /usr/bin/sing-box
+                            cd /
+                            rm -rf "$TMP_DIR"
+                            info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version, ${ARCH_VARIANT})"
+                            return 0
+                        else
+                            warn "    Binary not found in archive"
+                        fi
+                    else
+                        warn "    Failed to extract archive"
+                    fi
+                    cd /
+                    rm -rf "$TMP_DIR"
+                else
+                    warn "    Failed to download"
+                fi
+            else
+                warn "    URL not accessible for ${ARCH_VARIANT}"
+            fi
+        done
+        
+        if [ -n "$TRIED_ARCHS" ]; then
+            warn "Failed to download pinned version (tried:$TRIED_ARCHS), trying alternatives..."
+        else
+            warn "No architecture variants to try, skipping pinned version..."
+        fi
     fi
     
     # =============================================
