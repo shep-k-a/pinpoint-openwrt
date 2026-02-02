@@ -148,59 +148,69 @@ function clean_config_outbounds(config) {
 		}
 	}
 	
-	// Ensure direct-out and dns-out outbounds exist
-	let has_direct_out = false;
-	let has_dns_out = false;
+	// Reorder outbounds: VPN tunnels first, then direct-out, then dns-out, then others
+	// This ensures that with final='auto', sing-box will use the first VPN tunnel
+	let vpn_outbounds = [];
+	let direct_out = null;
+	let dns_out = null;
+	let other_outbounds = [];
 	
 	for (let ob in cleaned.outbounds) {
-		if (ob.tag == 'direct-out') {
-			has_direct_out = true;
-		}
-		if (ob.tag == 'dns-out') {
-			has_dns_out = true;
-		}
-	}
-	
-	// Add direct-out if missing (must be first)
-	if (!has_direct_out) {
-		let new_outbounds = [{ type: 'direct', tag: 'direct-out' }];
-		for (let ob in cleaned.outbounds) {
-			push(new_outbounds, ob);
-		}
-		cleaned.outbounds = new_outbounds;
-	} else {
-		// Ensure direct-out is first
-		let new_outbounds = [];
-		let direct_ob = null;
+		let tag = ob.tag || '';
+		let ob_type = ob.type || '';
 		
-		// Find and add direct-out first
-		for (let ob in cleaned.outbounds) {
-			if (ob.tag == 'direct-out') {
-				direct_ob = ob;
-			} else {
-				push(new_outbounds, ob);
-			}
-		}
-		
-		if (direct_ob) {
-			cleaned.outbounds = [direct_ob];
-			for (let ob in new_outbounds) {
-				push(cleaned.outbounds, ob);
-			}
+		if (tag == 'direct-out') {
+			direct_out = ob;
+		} else if (tag == 'dns-out') {
+			dns_out = ob;
+		} else if (ob_type in ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'hysteria2']) {
+			push(vpn_outbounds, ob);
+		} else {
+			push(other_outbounds, ob);
 		}
 	}
 	
-	// Add dns-out if missing
-	if (!has_dns_out) {
-		push(cleaned.outbounds, { type: 'dns', tag: 'dns-out' });
+	// Rebuild outbounds in correct order
+	let new_outbounds = [];
+	
+	// 1. VPN tunnels first (so they're used by default with final='auto')
+	for (let ob in vpn_outbounds) {
+		push(new_outbounds, ob);
 	}
 	
-	// Ensure route section exists with DNS rule
+	// 2. direct-out (create if missing)
+	if (!direct_out) {
+		direct_out = { type: 'direct', tag: 'direct-out' };
+	}
+	push(new_outbounds, direct_out);
+	
+	// 3. dns-out (create if missing)
+	if (!dns_out) {
+		dns_out = { type: 'dns', tag: 'dns-out' };
+	}
+	push(new_outbounds, dns_out);
+	
+	// 4. Other outbounds
+	for (let ob in other_outbounds) {
+		push(new_outbounds, ob);
+	}
+	
+	cleaned.outbounds = new_outbounds;
+	
+	// Ensure route section exists with DNS rule and final outbound
 	if (!cleaned.route) {
 		cleaned.route = {
 			rules: [],
 			auto_detect_interface: true
 		};
+	}
+	
+	// Set final outbound to first VPN tunnel (if exists)
+	if (length(vpn_outbounds) > 0 && vpn_outbounds[0].tag) {
+		cleaned.route.final = vpn_outbounds[0].tag;
+	} else {
+		// Fallback to auto if no VPN tunnels
+		cleaned.route.final = 'direct-out';
 	}
 	
 	// Check for DNS rule
