@@ -2090,6 +2090,24 @@ SBINIT
     chmod +x /etc/init.d/sing-box
     /etc/init.d/sing-box enable 2>/dev/null || true
     
+    # Initialize routing and services (Lite mode - no Python needed)
+    step "Initializing routing and services..."
+    
+    # Run pinpoint-init.sh to setup nftables and routing
+    if [ -f /opt/pinpoint/scripts/pinpoint-init.sh ]; then
+        chmod +x /opt/pinpoint/scripts/pinpoint-init.sh
+        /opt/pinpoint/scripts/pinpoint-init.sh start >/dev/null 2>&1 || true
+    fi
+    
+    # Run pinpoint-update.sh to update services (shell version, no Python needed)
+    if [ -f /opt/pinpoint/scripts/pinpoint-update.sh ]; then
+        chmod +x /opt/pinpoint/scripts/pinpoint-update.sh
+        /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 || true
+        info "Services and routing initialized"
+    else
+        warn "pinpoint-update.sh not found, services update skipped"
+    fi
+    
     # Restart rpcd to apply changes
     step "Restarting rpcd..."
     /etc/init.d/rpcd restart >/dev/null 2>&1
