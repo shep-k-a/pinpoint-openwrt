@@ -1546,7 +1546,7 @@ create_singbox_config() {
   "log": {"level": "info"},
   "dns": {
     "servers": [
-      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
       {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
     ]
   },
@@ -1570,6 +1570,7 @@ create_singbox_config() {
     "rules": [
       {"protocol": "dns", "outbound": "dns-out"}
     ],
+    "final": "direct-out",
     "auto_detect_interface": true
   }
 }
@@ -1580,7 +1581,7 @@ SBCONFIG
   "log": {"level": "info"},
   "dns": {
     "servers": [
-      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
       {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
     ]
   },
@@ -1604,6 +1605,7 @@ SBCONFIG
     "rules": [
       {"protocol": "dns", "outbound": "dns-out"}
     ],
+    "final": "direct-out",
     "auto_detect_interface": true
   }
 }

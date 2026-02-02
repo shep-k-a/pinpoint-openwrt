@@ -947,6 +947,23 @@ function update_subscriptions() {
 		// Clean config from internal fields before saving
 		let clean_config = clean_config_outbounds(config);
 		
+		// If this is the first time adding tunnels, set first VPN tunnel as active
+		// Check if there are VPN tunnels and if route.final is not set or is 'direct-out'
+		if (clean_config.route && clean_config.outbounds && length(clean_config.outbounds) > 0) {
+			let current_final = clean_config.route.final || '';
+			// If route.final is not set or points to direct-out, and we have VPN tunnels
+			if (current_final == 'direct-out' || current_final == '' || current_final == 'auto') {
+				// Find first VPN tunnel
+				for (let ob in clean_config.outbounds) {
+					let ob_type = ob.type || '';
+					if (ob_type in ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'hysteria2']) {
+						// Set it as final outbound (will be applied by clean_config_outbounds)
+						break;  // clean_config_outbounds already set route.final to first VPN
+					}
+				}
+			}
+		}
+		
 		// Save updated config and subscriptions
 		if (!write_json('/etc/sing-box/config.json', clean_config)) {
 			return { success: false, error: 'Failed to save sing-box config' };
