@@ -1214,14 +1214,16 @@ function health_check() {
 	let config = read_json('/etc/sing-box/config.json');
 	let outbound_map = {};
 	if (config && config.outbounds) {
-		for (let ob in config.outbounds) {
+		for (let i = 0; i < length(config.outbounds); i++) {
+			let ob = config.outbounds[i];
 			if (ob.tag && ob.server) {
 				outbound_map[ob.tag] = ob.server;
 			}
 		}
 	}
 	
-	for (let t in tunnels) {
+	for (let i = 0; i < length(tunnels); i++) {
+		let t = tunnels[i];
 		let latency = null;
 		let server = outbound_map[t.tag] || t.server || null;
 		
