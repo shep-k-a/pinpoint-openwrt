@@ -334,11 +334,149 @@ function add_subscription(params) {
 	return { success: true, id: id };
 }
 
-// Update all subscriptions (async version to avoid rpcd timeout)
+// Update all subscriptions
 function update_subscriptions() {
-	// Run update script in background and return immediately
-	system('/opt/pinpoint/scripts/pinpoint-update.sh update-subs &');
-	return { success: true, message: 'Update started in background' };
+	let subs = read_json(SUBSCRIPTIONS_FILE);
+	if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
+		return { success: false, error: 'No subscriptions configured' };
+	}
+	
+	let config = read_json('/etc/sing-box/config.json');
+	if (!config) {
+		config = { outbounds: [] };
+	}
+	if (!config.outbounds) {
+		config.outbounds = [];
+	}
+	
+	// Remove outbounds from previous subscription updates
+	let keep_outbounds = [];
+	for (let ob in config.outbounds) {
+		if (ob.type == 'direct' || ob.type == 'dns' || ob.type == 'block') {
+			push(keep_outbounds, ob);
+		} else if (!ob._subscription) {
+			// Keep manually added tunnels
+			push(keep_outbounds, ob);
+		}
+	}
+	config.outbounds = keep_outbounds;
+	
+	let total_updated = 0;
+	let errors = [];
+	
+	// For each subscription, download and parse
+	for (let i = 0; i < length(subs.subscriptions); i++) {
+		let sub = subs.subscriptions[i];
+		
+		// Download subscription content
+		let content = run_cmd('curl -fsSL --connect-timeout 30 --max-time 60 "' + sub.url + '" 2>/dev/null');
+		
+		if (!content || trim(content) == '') {
+			push(errors, 'Failed to download: ' + (sub.name || sub.url));
+			continue;
+		}
+		
+		content = trim(content);
+		let links = [];
+		
+		// Try to decode as Base64 first
+		if (!match(content, /^[a-z]+:\/\//i) && !match(content, /^\{/) && !match(content, /^proxies:/)) {
+			let decoded = b64decode(content);
+			if (decoded && trim(decoded) != '') {
+				content = trim(decoded);
+			}
+		}
+		
+		// Parse content based on format
+		let nodes_count = 0;
+		if (match(content, /^[a-z]+:\/\//i)) {
+			// Plain links (one per line)
+			links = split(content, '\n');
+		} else if (match(content, /^\{/)) {
+			// sing-box JSON format - extract outbounds directly
+			try {
+				let sb_config = json(content);
+				if (sb_config && sb_config.outbounds) {
+					for (let ob in sb_config.outbounds) {
+						if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
+							ob._subscription = sub.id;
+							// Ensure unique tag
+							let base_tag = ob.tag || 'tunnel';
+							let counter = 1;
+							while (true) {
+								let duplicate = false;
+								for (let existing in config.outbounds) {
+									if (existing.tag == ob.tag) {
+										duplicate = true;
+										break;
+									}
+								}
+								if (!duplicate) break;
+								ob.tag = base_tag + '_' + counter;
+								counter++;
+							}
+							push(config.outbounds, ob);
+							nodes_count++;
+							total_updated++;
+						}
+					}
+				}
+				links = []; // Already processed
+			} catch(e) {
+				push(errors, 'Failed to parse JSON: ' + (sub.name || sub.url));
+				continue;
+			}
+		}
+		
+		// Parse VPN links
+		for (let link in links) {
+			link = trim(link);
+			if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
+			
+			let outbound = parse_vpn_link(link);
+			if (outbound && outbound.tag) {
+				outbound._subscription = sub.id;
+				
+				// Ensure unique tag
+				let base_tag = outbound.tag;
+				let counter = 1;
+				while (true) {
+					let duplicate = false;
+					for (let existing in config.outbounds) {
+						if (existing.tag == outbound.tag) {
+							duplicate = true;
+							break;
+						}
+					}
+					if (!duplicate) break;
+					outbound.tag = base_tag + '_' + counter;
+					counter++;
+				}
+				
+				push(config.outbounds, outbound);
+				nodes_count++;
+				total_updated++;
+			}
+		}
+		
+		// Update subscription metadata
+		subs.subscriptions[i].nodes = nodes_count;
+		subs.subscriptions[i].updated = trim(run_cmd('date "+%Y-%m-%d %H:%M:%S"'));
+		subs.subscriptions[i].last_update = time();
+	}
+	
+	// Save updated config and subscriptions
+	write_json('/etc/sing-box/config.json', config);
+	write_json(SUBSCRIPTIONS_FILE, subs);
+	
+	// Restart sing-box
+	run_cmd('/etc/init.d/sing-box restart 2>&1');
+	
+	return { 
+		success: true, 
+		total_updated: total_updated,
+		errors: length(errors) > 0 ? errors : null
+	};
 }
 
 // Update all subscriptions (sync version - currently has issues with rpcd)
@@ -497,15 +635,39 @@ function health_check() {
 	let tunnels = get_tunnels().tunnels;
 	let results = [];
 	
+	// Get sing-box config to find server addresses
+	let config = read_json('/etc/sing-box/config.json');
+	let outbound_map = {};
+	if (config && config.outbounds) {
+		for (let ob in config.outbounds) {
+			if (ob.tag && ob.server) {
+				outbound_map[ob.tag] = ob.server;
+			}
+		}
+	}
+	
 	for (let t in tunnels) {
-		// Ping test via tunnel
 		let latency = null;
-		let test_out = run_cmd('ping -c 1 -W 3 8.8.8.8 2>/dev/null');
+		let server = outbound_map[t.tag] || t.server || null;
 		
-		if (test_out) {
-			let m = match(test_out, /time=([0-9.]+)/);
-			if (m) {
-				latency = int(+m[1]);
+		if (server) {
+			// Ping server directly (simplified check)
+			let test_out = run_cmd('ping -c 1 -W 3 "' + server + '" 2>/dev/null');
+			
+			if (test_out) {
+				let m = match(test_out, /time=([0-9.]+)/);
+				if (m) {
+					latency = int(+m[1]);
+				}
+			}
+		} else {
+			// Fallback: try to ping through default route
+			let test_out = run_cmd('ping -c 1 -W 3 8.8.8.8 2>/dev/null');
+			if (test_out) {
+				let m = match(test_out, /time=([0-9.]+)/);
+				if (m) {
+					latency = int(+m[1]);
+				}
 			}
 		}
 		
