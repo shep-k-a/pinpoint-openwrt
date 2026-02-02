@@ -174,14 +174,9 @@ function clean_config_outbounds(config) {
 			dns_out = ob;
 		} else {
 			// Check if it's a VPN tunnel type
-			let is_vpn = false;
-			let vpn_types = ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'hysteria2'];
-			for (let vpn_type in vpn_types) {
-				if (ob_type == vpn_type) {
-					is_vpn = true;
-					break;
-				}
-			}
+			let is_vpn = (ob_type == 'vless' || ob_type == 'vmess' || ob_type == 'trojan' || 
+			              ob_type == 'shadowsocks' || ob_type == 'wireguard' || 
+			              ob_type == 'hysteria' || ob_type == 'hysteria2');
 			
 			if (is_vpn) {
 				push(vpn_outbounds, ob);
