@@ -745,13 +745,28 @@ function get_tunnels() {
 	let active = '';
 	
 	if (config && config.outbounds) {
-		for (let ob in config.outbounds) {
+		for (let i = 0; i < length(config.outbounds); i++) {
+			let ob = config.outbounds[i];
 			if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
+				// Get latency from ping
+				let latency = null;
+				let server = ob.server || '';
+				if (server) {
+					let test_out = run_cmd('ping -c 1 -W 3 "' + server + '" 2>/dev/null');
+					if (test_out) {
+						let m = match(test_out, /time=([0-9.]+)/);
+						if (m) {
+							latency = int(+m[1]);
+						}
+					}
+				}
+				
 				push(tunnels, {
 					tag: ob.tag || 'unknown',
 					type: ob.type,
-					server: ob.server || '',
-					enabled: true
+					server: server,
+					enabled: true,
+					latency: latency
 				});
 			}
 		}
