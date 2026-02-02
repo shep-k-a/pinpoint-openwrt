@@ -191,15 +191,12 @@ info "DNSmasq config removed"
 # ============================================
 # Restore DNSmasq to original (if was replaced)
 # ============================================
-step "Checking DNSmasq configuration..."
-# If dnsmasq-full was installed and original dnsmasq exists in repo, restore it
+step "Restoring DNSmasq configuration..."
+
+# Check if dnsmasq-full was installed
+HAD_DNSMASQ_FULL=0
 if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
-    # Check if original dnsmasq is available
-    if opkg list 2>/dev/null | grep -q "^dnsmasq "; then
-        warn "dnsmasq-full was installed. Restoring original dnsmasq..."
-        opkg remove dnsmasq-full --force-removal-of-dependent-packages >/dev/null 2>&1 || true
-        opkg install dnsmasq >/dev/null 2>&1 || warn "Could not restore original dnsmasq"
-    fi
+    HAD_DNSMASQ_FULL=1
 fi
 
 # Restore DNSmasq confdir if it was changed
@@ -220,7 +217,13 @@ if uci get dhcp.@dnsmasq[0].server 2>/dev/null | grep -q "127.0.0.1#5053"; then
     uci commit dhcp 2>/dev/null || true
 fi
 
-/etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+# Set fallback DNS servers if none exist
+if ! uci get dhcp.@dnsmasq[0].server >/dev/null 2>&1; then
+    uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+    uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+fi
+
 info "DNSmasq configuration restored"
 
 # ============================================
