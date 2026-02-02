@@ -29,6 +29,15 @@ function write_json(path, data) {
 	return writefile(path, sprintf('%J', data));
 }
 
+// Helper: run command and get output
+function run_cmd(cmd) {
+	let p = popen(cmd, 'r');
+	if (!p) return null;
+	let out = p.read('all');
+	p.close();
+	return out;
+}
+
 // Helper: clean outbound from internal fields before saving
 function clean_outbound(ob) {
 	// Create a clean copy without internal fields
