@@ -391,6 +391,7 @@ install_singbox() {
     # =============================================
     if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
         step "Installing pinned sing-box v${SINGBOX_PINNED_VERSION} from GitHub..."
+        info "Will try variants: ${SAGERNET_ARCH_VARIANTS}"
         
         TMP_DIR="/tmp/singbox_install"
         mkdir -p "$TMP_DIR"
@@ -430,11 +431,17 @@ install_singbox() {
                     warn "    Failed to download"
                 fi
             else
-                [ "$DEBUG" = "1" ] && warn "    URL not accessible" || true
+                warn "    URL not accessible for ${ARCH_VARIANT}"
             fi
         done
         
-        warn "Failed to download pinned version (tried:$TRIED_ARCHS), trying alternatives..."
+        if [ -n "$TRIED_ARCHS" ]; then
+            warn "Failed to download pinned version (tried:$TRIED_ARCHS), trying alternatives..."
+        else
+            warn "No architecture variants to try, skipping pinned version..."
+        fi
+    elif [ "$SINGBOX_PIN_ENABLED" = "1" ]; then
+        warn "SAGERNET_ARCH_VARIANTS not set, skipping pinned version download"
     fi
     
     # =============================================
