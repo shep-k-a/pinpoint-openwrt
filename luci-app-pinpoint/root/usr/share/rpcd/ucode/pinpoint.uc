@@ -57,6 +57,76 @@ function clean_config_outbounds(config) {
 			cleaned[key] = config[key];
 		}
 	}
+	
+	// Ensure TUN inbound exists
+	if (!cleaned.inbounds || length(cleaned.inbounds) == 0) {
+		cleaned.inbounds = [{
+			type: 'tun',
+			tag: 'tun-in',
+			interface_name: 'tun1',
+			inet4_address: '10.0.0.1/30',
+			mtu: 1400,
+			auto_route: false,
+			sniff: true,
+			stack: 'gvisor'
+		}];
+	} else {
+		// Check if TUN inbound exists
+		let has_tun = false;
+		for (let inbound in cleaned.inbounds) {
+			if (inbound.type == 'tun') {
+				has_tun = true;
+				break;
+			}
+		}
+		
+		// Add TUN inbound if missing
+		if (!has_tun) {
+			let tun_inbound = {
+				type: 'tun',
+				tag: 'tun-in',
+				interface_name: 'tun1',
+				inet4_address: '10.0.0.1/30',
+				mtu: 1400,
+				auto_route: false,
+				sniff: true,
+				stack: 'gvisor'
+			};
+			// Insert at beginning
+			let new_inbounds = [tun_inbound];
+			for (let inbound in cleaned.inbounds) {
+				push(new_inbounds, inbound);
+			}
+			cleaned.inbounds = new_inbounds;
+		}
+	}
+	
+	// Ensure route section exists with DNS rule
+	if (!cleaned.route) {
+		cleaned.route = {
+			rules: [],
+			auto_detect_interface: true
+		};
+	}
+	
+	// Check for DNS rule
+	let has_dns_rule = false;
+	for (let rule in cleaned.route.rules) {
+		if (rule.protocol == 'dns') {
+			has_dns_rule = true;
+			break;
+		}
+	}
+	
+	if (!has_dns_rule) {
+		// Insert DNS rule at beginning
+		let new_rules = [{ protocol: 'dns', outbound: 'dns-out' }];
+		for (let rule in cleaned.route.rules) {
+			push(new_rules, rule);
+		}
+		cleaned.route.rules = new_rules;
+	}
+	
 	return cleaned;
 }
 
