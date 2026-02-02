@@ -60,16 +60,40 @@ function clean_config_outbounds(config) {
 	
 	// Ensure TUN inbound exists
 	if (!cleaned.inbounds || length(cleaned.inbounds) == 0) {
-		cleaned.inbounds = [{
+		// Detect sing-box version to use correct format
+		let sb_version = run_cmd('sing-box version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1');
+		let use_legacy_format = false;
+		
+		if (sb_version) {
+			let version_parts = split(trim(sb_version), '.');
+			if (length(version_parts) >= 2) {
+				let major = int(version_parts[0]);
+				let minor = int(version_parts[1]);
+				// Versions < 1.11.0 use "address" instead of "inet4_address"
+				if (major < 1 || (major == 1 && minor < 11)) {
+					use_legacy_format = true;
+				}
+			}
+		}
+		
+		let tun_inbound = {
 			type: 'tun',
 			tag: 'tun-in',
 			interface_name: 'tun1',
-			inet4_address: '10.0.0.1/30',
 			mtu: 1400,
 			auto_route: false,
 			sniff: true,
 			stack: 'gvisor'
-		}];
+		};
+		
+		// Use appropriate address field based on version
+		if (use_legacy_format) {
+			tun_inbound.address = ['10.0.0.1/30'];
+		} else {
+			tun_inbound.inet4_address = '10.0.0.1/30';
+		}
+		
+		cleaned.inbounds = [tun_inbound];
 	} else {
 		// Check if TUN inbound exists
 		let has_tun = false;
