@@ -294,13 +294,37 @@ function get_tunnels() {
 		}
 	}
 	
-	// Get subscriptions
+	// Get subscriptions and count nodes from config
 	let subs = read_json(SUBSCRIPTIONS_FILE);
+	let subscriptions = [];
+	if (subs && subs.subscriptions) {
+		for (let sub in subs.subscriptions) {
+			// Count nodes for this subscription from sing-box config
+			let nodes_count = 0;
+			if (config && config.outbounds) {
+				for (let ob in config.outbounds) {
+					if (ob._subscription == sub.id) {
+						nodes_count++;
+					}
+				}
+			}
+			
+			// Update subscription data
+			let sub_data = {
+				id: sub.id,
+				name: sub.name || 'Subscription',
+				url: sub.url || '',
+				nodes: nodes_count,
+				updated: sub.updated || null
+			};
+			push(subscriptions, sub_data);
+		}
+	}
 	
 	return { 
 		tunnels: tunnels, 
 		active: active,
-		subscriptions: subs ? subs.subscriptions || [] : []
+		subscriptions: subscriptions
 	};
 }
 
@@ -336,147 +360,158 @@ function add_subscription(params) {
 
 // Update all subscriptions
 function update_subscriptions() {
-	let subs = read_json(SUBSCRIPTIONS_FILE);
-	if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
-		return { success: false, error: 'No subscriptions configured' };
-	}
-	
-	let config = read_json('/etc/sing-box/config.json');
-	if (!config) {
-		config = { outbounds: [] };
-	}
-	if (!config.outbounds) {
-		config.outbounds = [];
-	}
-	
-	// Remove outbounds from previous subscription updates
-	let keep_outbounds = [];
-	for (let ob in config.outbounds) {
-		if (ob.type == 'direct' || ob.type == 'dns' || ob.type == 'block') {
-			push(keep_outbounds, ob);
-		} else if (!ob._subscription) {
-			// Keep manually added tunnels
-			push(keep_outbounds, ob);
-		}
-	}
-	config.outbounds = keep_outbounds;
-	
-	let total_updated = 0;
-	let errors = [];
-	
-	// For each subscription, download and parse
-	for (let i = 0; i < length(subs.subscriptions); i++) {
-		let sub = subs.subscriptions[i];
-		
-		// Download subscription content
-		let content = run_cmd('curl -fsSL --connect-timeout 30 --max-time 60 "' + sub.url + '" 2>/dev/null');
-		
-		if (!content || trim(content) == '') {
-			push(errors, 'Failed to download: ' + (sub.name || sub.url));
-			continue;
+	try {
+		let subs = read_json(SUBSCRIPTIONS_FILE);
+		if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
+			return { success: false, error: 'No subscriptions configured' };
 		}
 		
-		content = trim(content);
-		let links = [];
+		let config = read_json('/etc/sing-box/config.json');
+		if (!config) {
+			config = { outbounds: [] };
+		}
+		if (!config.outbounds) {
+			config.outbounds = [];
+		}
 		
-		// Try to decode as Base64 first
-		if (!match(content, /^[a-z]+:\/\//i) && !match(content, /^\{/) && !match(content, /^proxies:/)) {
-			let decoded = b64decode(content);
-			if (decoded && trim(decoded) != '') {
-				content = trim(decoded);
+		// Remove outbounds from previous subscription updates
+		let keep_outbounds = [];
+		for (let ob in config.outbounds) {
+			if (ob.type == 'direct' || ob.type == 'dns' || ob.type == 'block') {
+				push(keep_outbounds, ob);
+			} else if (!ob._subscription) {
+				// Keep manually added tunnels
+				push(keep_outbounds, ob);
 			}
 		}
+		config.outbounds = keep_outbounds;
 		
-		// Parse content based on format
-		let nodes_count = 0;
-		if (match(content, /^[a-z]+:\/\//i)) {
-			// Plain links (one per line)
-			links = split(content, '\n');
-		} else if (match(content, /^\{/)) {
-			// sing-box JSON format - extract outbounds directly
-			try {
-				let sb_config = json(content);
-				if (sb_config && sb_config.outbounds) {
-					for (let ob in sb_config.outbounds) {
-						if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
-							ob._subscription = sub.id;
-							// Ensure unique tag
-							let base_tag = ob.tag || 'tunnel';
-							let counter = 1;
-							while (true) {
-								let duplicate = false;
-								for (let existing in config.outbounds) {
-									if (existing.tag == ob.tag) {
-										duplicate = true;
-										break;
-									}
-								}
-								if (!duplicate) break;
-								ob.tag = base_tag + '_' + counter;
-								counter++;
-							}
-							push(config.outbounds, ob);
-							nodes_count++;
-							total_updated++;
-						}
-					}
-				}
-				links = []; // Already processed
-			} catch(e) {
-				push(errors, 'Failed to parse JSON: ' + (sub.name || sub.url));
+		let total_updated = 0;
+		let errors = [];
+		
+		// For each subscription, download and parse
+		for (let i = 0; i < length(subs.subscriptions); i++) {
+			let sub = subs.subscriptions[i];
+			
+			// Download subscription content
+			let content = run_cmd('curl -fsSL --connect-timeout 30 --max-time 60 "' + sub.url + '" 2>/dev/null');
+			
+			if (!content || trim(content) == '') {
+				push(errors, 'Failed to download: ' + (sub.name || sub.url));
+				subs.subscriptions[i].nodes = 0;
+				subs.subscriptions[i].updated = null;
 				continue;
 			}
-		}
-		
-		// Parse VPN links
-		for (let link in links) {
-			link = trim(link);
-			if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
 			
-			let outbound = parse_vpn_link(link);
-			if (outbound && outbound.tag) {
-				outbound._subscription = sub.id;
-				
-				// Ensure unique tag
-				let base_tag = outbound.tag;
-				let counter = 1;
-				while (true) {
-					let duplicate = false;
-					for (let existing in config.outbounds) {
-						if (existing.tag == outbound.tag) {
-							duplicate = true;
-							break;
+			content = trim(content);
+			let links = [];
+			
+			// Try to decode as Base64 first
+			if (!match(content, /^[a-z]+:\/\//i) && !match(content, /^\{/) && !match(content, /^proxies:/)) {
+				let decoded = b64decode(content);
+				if (decoded && trim(decoded) != '') {
+					content = trim(decoded);
+				}
+			}
+			
+			// Parse content based on format
+			let nodes_count = 0;
+			if (match(content, /^[a-z]+:\/\//i)) {
+				// Plain links (one per line)
+				links = split(content, '\n');
+			} else if (match(content, /^\{/)) {
+				// sing-box JSON format - extract outbounds directly
+				try {
+					let sb_config = json(content);
+					if (sb_config && sb_config.outbounds) {
+						for (let ob in sb_config.outbounds) {
+							if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
+								ob._subscription = sub.id;
+								// Ensure unique tag
+								let base_tag = ob.tag || 'tunnel';
+								let counter = 1;
+								while (true) {
+									let duplicate = false;
+									for (let existing in config.outbounds) {
+										if (existing.tag == ob.tag) {
+											duplicate = true;
+											break;
+										}
+									}
+									if (!duplicate) break;
+									ob.tag = base_tag + '_' + counter;
+									counter++;
+								}
+								push(config.outbounds, ob);
+								nodes_count++;
+								total_updated++;
+							}
 						}
 					}
-					if (!duplicate) break;
-					outbound.tag = base_tag + '_' + counter;
-					counter++;
+					links = []; // Already processed
+				} catch(e) {
+					push(errors, 'Failed to parse JSON: ' + (sub.name || sub.url) + ' - ' + e);
+					subs.subscriptions[i].nodes = 0;
+					subs.subscriptions[i].updated = null;
+					continue;
 				}
-				
-				push(config.outbounds, outbound);
-				nodes_count++;
-				total_updated++;
 			}
+			
+			// Parse VPN links
+			for (let link in links) {
+				link = trim(link);
+				if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
+				
+				let outbound = parse_vpn_link(link);
+				if (outbound && outbound.tag) {
+					outbound._subscription = sub.id;
+					
+					// Ensure unique tag
+					let base_tag = outbound.tag;
+					let counter = 1;
+					while (true) {
+						let duplicate = false;
+						for (let existing in config.outbounds) {
+							if (existing.tag == outbound.tag) {
+								duplicate = true;
+								break;
+							}
+						}
+						if (!duplicate) break;
+						outbound.tag = base_tag + '_' + counter;
+						counter++;
+					}
+					
+					push(config.outbounds, outbound);
+					nodes_count++;
+					total_updated++;
+				}
+			}
+			
+			// Update subscription metadata
+			subs.subscriptions[i].nodes = nodes_count;
+			subs.subscriptions[i].updated = trim(run_cmd('date "+%Y-%m-%d %H:%M:%S"'));
+			subs.subscriptions[i].last_update = time();
 		}
 		
-		// Update subscription metadata
-		subs.subscriptions[i].nodes = nodes_count;
-		subs.subscriptions[i].updated = trim(run_cmd('date "+%Y-%m-%d %H:%M:%S"'));
-		subs.subscriptions[i].last_update = time();
+		// Save updated config and subscriptions
+		write_json('/etc/sing-box/config.json', config);
+		write_json(SUBSCRIPTIONS_FILE, subs);
+		
+		// Restart sing-box
+		run_cmd('/etc/init.d/sing-box restart 2>&1');
+		
+		return { 
+			success: true, 
+			total_updated: total_updated,
+			errors: length(errors) > 0 ? errors : null
+		};
+	} catch(e) {
+		return { 
+			success: false, 
+			error: 'Update failed: ' + e
+		};
 	}
-	
-	// Save updated config and subscriptions
-	write_json('/etc/sing-box/config.json', config);
-	write_json(SUBSCRIPTIONS_FILE, subs);
-	
-	// Restart sing-box
-	run_cmd('/etc/init.d/sing-box restart 2>&1');
-	
-	return { 
-		success: true, 
-		total_updated: total_updated,
-		errors: length(errors) > 0 ? errors : null
-	};
 }
 
 // Update all subscriptions (sync version - currently has issues with rpcd)
