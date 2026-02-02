@@ -19,8 +19,9 @@ table inet pinpoint {
     }
     
     # Mark incoming packets from LAN destined to tunnel
+    # Use raw priority to mark BEFORE routing decision
     chain prerouting {
-        type filter hook prerouting priority mangle - 1; policy accept;
+        type filter hook prerouting priority raw - 1; policy accept;
         
         # Skip local/private networks
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return

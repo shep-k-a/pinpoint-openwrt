@@ -1359,7 +1359,7 @@ table inet pinpoint {
     set tunnel_nets { type ipv4_addr; flags interval; }
     
     chain prerouting {
-        type filter hook prerouting priority mangle - 1; policy accept;
+        type filter hook prerouting priority raw - 1; policy accept;
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
         ip daddr @tunnel_ips meta mark set 0x1 counter
         ip daddr @tunnel_nets meta mark set 0x1 counter
