@@ -86,7 +86,21 @@ table inet pinpoint {
     chain output {
         type route hook output priority mangle - 1; policy accept;
         
+        # Skip local/private networks
+        ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
+        
         # Also mark local traffic (from router itself)
+        ip daddr @tunnel_ips meta mark set 0x1 counter
+        ip daddr @tunnel_nets meta mark set 0x1 counter
+    }
+    
+    chain forward {
+        type filter hook forward priority mangle - 1; policy accept;
+        
+        # Skip local/private networks
+        ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
+        
+        # Mark forwarded packets (LAN -> WAN)
         ip daddr @tunnel_ips meta mark set 0x1 counter
         ip daddr @tunnel_nets meta mark set 0x1 counter
     }
