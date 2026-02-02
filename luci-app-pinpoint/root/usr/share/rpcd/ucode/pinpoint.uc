@@ -589,9 +589,17 @@ function update_subscriptions() {
 		}
 		
 		// Remove outbounds from previous subscription updates
+		// Keep only one 'direct' outbound and system outbounds
 		let keep_outbounds = [];
+		let direct_count = 0;
 		for (let ob in config.outbounds) {
-			if (ob.type == 'direct' || ob.type == 'dns' || ob.type == 'block') {
+			if (ob.type == 'direct') {
+				// Keep only first direct outbound
+				if (direct_count == 0) {
+					push(keep_outbounds, ob);
+					direct_count++;
+				}
+			} else if (ob.type == 'dns' || ob.type == 'block') {
 				push(keep_outbounds, ob);
 			} else if (!ob._subscription) {
 				// Keep manually added tunnels
