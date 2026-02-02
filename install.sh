@@ -21,21 +21,21 @@ set -e
 # ============================================
 SCRIPT_URL="https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh"
 
-# Check if running from pipe and no mode specified
-if [ ! -t 0 ] && [ -z "$1" ]; then
+# Check if running from pipe and no mode specified (and not already re-executed)
+if [ ! -t 0 ] && [ -z "$1" ] && [ -z "$PINPOINT_REEXEC" ]; then
     # Running from pipe without arguments - download and re-execute for interactive mode
-    TEMP_SCRIPT="/tmp/pinpoint_install_$$.sh"
+    TEMP_SCRIPT="/tmp/pinpoint_install.sh"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$SCRIPT_URL" -o "$TEMP_SCRIPT"
+        curl -fsSL "$SCRIPT_URL" -o "$TEMP_SCRIPT" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$TEMP_SCRIPT" "$SCRIPT_URL"
+        wget -qO "$TEMP_SCRIPT" "$SCRIPT_URL" 2>/dev/null
     else
         echo "Error: curl or wget required"
         exit 1
     fi
     chmod +x "$TEMP_SCRIPT"
+    export PINPOINT_REEXEC=1
     exec sh "$TEMP_SCRIPT" "$@"
-    exit 0
 fi
 
 # ============================================
