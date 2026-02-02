@@ -192,8 +192,8 @@ function clean_config_outbounds(config) {
 	
 	// 1. VPN tunnels first (so they're used by default with final='auto')
 	if (vpn_outbounds) {
-		for (let ob in vpn_outbounds) {
-			push(new_outbounds, ob);
+		for (let i = 0; i < length(vpn_outbounds); i++) {
+			push(new_outbounds, vpn_outbounds[i]);
 		}
 	}
 	
@@ -211,8 +211,8 @@ function clean_config_outbounds(config) {
 	
 	// 4. Other outbounds
 	if (other_outbounds) {
-		for (let ob in other_outbounds) {
-			push(new_outbounds, ob);
+		for (let i = 0; i < length(other_outbounds); i++) {
+			push(new_outbounds, other_outbounds[i]);
 		}
 	}
 	
