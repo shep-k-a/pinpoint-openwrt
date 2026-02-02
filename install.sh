@@ -1753,23 +1753,41 @@ install_luci_app() {
     install_package "https-dns-proxy" "https-dns-proxy"
     
     # Configure dnsmasq to use DoH proxy (bypasses ISP DNS interception)
+    # Only if https-dns-proxy is installed and working
     if [ -x /etc/init.d/https-dns-proxy ]; then
         /etc/init.d/https-dns-proxy enable 2>/dev/null || true
         /etc/init.d/https-dns-proxy start 2>/dev/null || true
-        # Use local DoH proxy (127.0.0.1:5053)
-        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
-        uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
-        uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#5053' 2>/dev/null || true
-        info "DNS over HTTPS enabled (bypasses ISP DNS hijacking)"
+        sleep 2
+        
+        # Check if https-dns-proxy is actually running and responding
+        if netstat -ln 2>/dev/null | grep -q ":5053" || ss -ln 2>/dev/null | grep -q ":5053"; then
+            # Use local DoH proxy (127.0.0.1:5053)
+            uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+            uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+            uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#5053' 2>/dev/null || true
+            uci commit dhcp 2>/dev/null || true
+            /etc/init.d/dnsmasq restart 2>/dev/null || true
+            info "DNS over HTTPS enabled (bypasses ISP DNS hijacking)"
+        else
+            warn "https-dns-proxy not responding, using fallback DNS"
+            # Fallback to public DNS
+            uci set dhcp.@dnsmasq[0].noresolv='0' 2>/dev/null || true
+            uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
+            uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+            uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+            uci commit dhcp 2>/dev/null || true
+            /etc/init.d/dnsmasq restart 2>/dev/null || true
+        fi
     else
         # Fallback to public DNS (may be intercepted by ISP)
-        uci set dhcp.@dnsmasq[0].noresolv='1' 2>/dev/null || true
+        warn "https-dns-proxy not available, using plain DNS"
+        uci set dhcp.@dnsmasq[0].noresolv='0' 2>/dev/null || true
         uci -q delete dhcp.@dnsmasq[0].server 2>/dev/null || true
         uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
         uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
-        warn "https-dns-proxy not available, using plain DNS (may be intercepted)"
+        uci commit dhcp 2>/dev/null || true
+        /etc/init.d/dnsmasq restart 2>/dev/null || true
     fi
-    uci commit dhcp 2>/dev/null || true
     
     # Create directories
     step "Creating directories..."
