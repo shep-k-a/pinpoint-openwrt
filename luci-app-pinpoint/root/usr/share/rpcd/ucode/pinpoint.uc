@@ -172,10 +172,22 @@ function clean_config_outbounds(config) {
 			direct_out = ob;
 		} else if (tag == 'dns-out') {
 			dns_out = ob;
-		} else if (ob_type in ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'hysteria2']) {
-			push(vpn_outbounds, ob);
 		} else {
-			push(other_outbounds, ob);
+			// Check if it's a VPN tunnel type
+			let is_vpn = false;
+			let vpn_types = ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'hysteria2'];
+			for (let vpn_type in vpn_types) {
+				if (ob_type == vpn_type) {
+					is_vpn = true;
+					break;
+				}
+			}
+			
+			if (is_vpn) {
+				push(vpn_outbounds, ob);
+			} else {
+				push(other_outbounds, ob);
+			}
 		}
 	}
 	
