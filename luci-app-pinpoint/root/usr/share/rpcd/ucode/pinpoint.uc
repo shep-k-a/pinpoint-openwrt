@@ -29,6 +29,37 @@ function write_json(path, data) {
 	return writefile(path, sprintf('%J', data));
 }
 
+// Helper: clean outbound from internal fields before saving
+function clean_outbound(ob) {
+	// Create a clean copy without internal fields
+	let clean = {};
+	for (let key in ob) {
+		// Skip internal fields that sing-box doesn't understand
+		if (key != '_subscription') {
+			clean[key] = ob[key];
+		}
+	}
+	return clean;
+}
+
+// Helper: clean all outbounds in config
+function clean_config_outbounds(config) {
+	if (!config || !config.outbounds) return config;
+	
+	let cleaned = {};
+	for (let key in config) {
+		if (key == 'outbounds') {
+			cleaned[key] = [];
+			for (let ob in config.outbounds) {
+				push(cleaned[key], clean_outbound(ob));
+			}
+		} else {
+			cleaned[key] = config[key];
+		}
+	}
+	return cleaned;
+}
+
 // Helper: run command and get output
 function run_cmd(cmd) {
 	let p = popen(cmd, 'r');
@@ -717,8 +748,11 @@ function update_subscriptions() {
 		subs.subscriptions[i].last_update = time();
 		}
 		
+		// Clean config from internal fields before saving
+		let clean_config = clean_config_outbounds(config);
+		
 		// Save updated config and subscriptions
-		if (!write_json('/etc/sing-box/config.json', config)) {
+		if (!write_json('/etc/sing-box/config.json', clean_config)) {
 			return { success: false, error: 'Failed to save sing-box config' };
 		}
 		if (!write_json(SUBSCRIPTIONS_FILE, subs)) {
@@ -847,7 +881,9 @@ function update_subscriptions_sync() {
 		writefile(DATA_DIR + '/subscription_' + sub.id + '.txt', content);
 	}
 	
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 	write_json(SUBSCRIPTIONS_FILE, subs);
 	
 	// Restart sing-box in background (don't block)
@@ -902,7 +938,9 @@ function set_active_tunnel(params) {
 		return { error: 'Tunnel not found' };
 	}
 	
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 	run_cmd('/etc/init.d/sing-box restart 2>&1');
 	
 	return { success: true, active: tag };
@@ -1148,7 +1186,9 @@ function import_link(params) {
 	}
 	
 	push(config.outbounds, outbound);
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 	
 	return { success: true, tag: outbound.tag, type: outbound.type };
 }
@@ -1188,7 +1228,9 @@ function import_batch(params) {
 		}
 	}
 	
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 	
 	return { 
 		success: true, 
@@ -1291,7 +1333,9 @@ function delete_tunnel(params) {
 	}
 	
 	config.outbounds = newOutbounds;
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 	
 	return { success: true };
 }
