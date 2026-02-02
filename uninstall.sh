@@ -80,6 +80,12 @@ killall -9 python3 2>/dev/null || true
 /etc/init.d/sing-box disable 2>/dev/null || true
 killall -9 sing-box 2>/dev/null || true
 
+# Kill any remaining pinpoint processes
+pkill -9 -f pinpoint 2>/dev/null || true
+killall -9 pinpoint 2>/dev/null || true
+# Kill processes by name pattern
+ps | grep -i pinpoint | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null || true
+
 # Stop https-dns-proxy
 /etc/init.d/https-dns-proxy stop 2>/dev/null || true
 /etc/init.d/https-dns-proxy disable 2>/dev/null || true
@@ -101,6 +107,11 @@ sed -i '/^100[[:space:]]/d' /etc/iproute2/rt_tables 2>/dev/null || true
 
 # Remove NFTables table
 nft delete table inet pinpoint 2>/dev/null || true
+
+# Kill any remaining pinpoint processes (again, after routing cleanup)
+pkill -9 -f pinpoint 2>/dev/null || true
+killall -9 pinpoint 2>/dev/null || true
+ps | grep -i pinpoint | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null || true
 
 # Remove firewall rules
 RULE_IDX=$(uci show firewall 2>/dev/null | grep "name='Allow-PinPoint'" | cut -d'[' -f2 | cut -d']' -f1 | head -1)
