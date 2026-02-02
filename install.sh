@@ -69,9 +69,17 @@ download() {
     URL="$1"
     OUTPUT="$2"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL -o "$OUTPUT" "$URL" 2>/dev/null
+        if curl -fsSL --max-time 30 --connect-timeout 10 -o "$OUTPUT" "$URL" 2>/dev/null; then
+            return 0
+        else
+            return 1
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -q -O "$OUTPUT" "$URL" 2>/dev/null
+        if wget -q --timeout=30 --tries=2 -O "$OUTPUT" "$URL" 2>/dev/null; then
+            return 0
+        else
+            return 1
+        fi
     else
         error "Neither curl nor wget found. Install one: opkg install curl"
     fi
@@ -229,19 +237,25 @@ setup_immortalwrt_repo() {
     # Get OpenWRT version
     OPENWRT_MAJOR=$(echo "$OPENWRT_VERSION" | cut -d. -f1,2)
     
-    # Find working ImmortalWRT release
-    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.4" "23.05.3"; do
+    # Find working ImmortalWRT release (try more versions)
+    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.5" "23.05.4" "23.05.3" "23.05.2" "23.05.1" "23.05.0"; do
         IMMORTAL_BASE="https://downloads.immortalwrt.org/releases/${IMMORTAL_VER}/packages/${IMMORTAL_ARCH}/packages"
         
-        # Test if repository is accessible
-        if curl -fsSL "${IMMORTAL_BASE}/Packages.gz" >/dev/null 2>&1; then
+        # Test if repository is accessible (try both Packages.gz and Packages)
+        if curl -fsSL --max-time 10 "${IMMORTAL_BASE}/Packages.gz" >/dev/null 2>&1 || \
+           curl -fsSL --max-time 10 "${IMMORTAL_BASE}/Packages" >/dev/null 2>&1; then
             IMMORTAL_RELEASE="$IMMORTAL_VER"
+            info "Found accessible ImmortalWRT repository: ${IMMORTAL_VER}"
             break
+        else
+            # Debug: show what we tried
+            [ "$DEBUG" = "1" ] && echo "  Trying ${IMMORTAL_VER}... failed" || true
         fi
     done
     
     if [ -z "$IMMORTAL_RELEASE" ]; then
         warn "Could not find accessible ImmortalWRT repository"
+        warn "Architecture: ${IMMORTAL_ARCH}, OpenWRT: ${OPENWRT_VERSION}"
         return 1
     fi
     
@@ -334,6 +348,10 @@ detect_package_arch() {
 install_singbox() {
     step "Installing sing-box..."
     
+    # Detect architecture first
+    detect_package_arch
+    info "Architecture: ${ARCH} → ImmortalWRT: ${IMMORTAL_ARCH}, SagerNet: ${SAGERNET_ARCH}"
+    
     # Check if already installed with sufficient version
     if command -v sing-box >/dev/null 2>&1; then
         CURRENT_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
@@ -356,9 +374,6 @@ install_singbox() {
         fi
     fi
     
-    # Detect architecture
-    detect_package_arch
-    
     # =============================================
     # Method 1: SagerNet pinned version (PREFERRED)
     # =============================================
@@ -370,23 +385,34 @@ install_singbox() {
         TMP_DIR="/tmp/singbox_install"
         mkdir -p "$TMP_DIR"
         
-        if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
-            cd "$TMP_DIR"
-            tar -xzf sing-box.tar.gz 2>/dev/null
-            
-            BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
-            if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-                # Remove old version if exists
-                rm -f /usr/bin/sing-box 2>/dev/null
-                chmod +x "$BINARY_PATH"
-                mv "$BINARY_PATH" /usr/bin/sing-box
+        # Check if URL is accessible first
+        if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
+            if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                cd "$TMP_DIR"
+                if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                    BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                    if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                        # Remove old version if exists
+                        rm -f /usr/bin/sing-box 2>/dev/null
+                        chmod +x "$BINARY_PATH"
+                        mv "$BINARY_PATH" /usr/bin/sing-box
+                        cd /
+                        rm -rf "$TMP_DIR"
+                        info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version)"
+                        return 0
+                    else
+                        warn "Binary not found in archive"
+                    fi
+                else
+                    warn "Failed to extract archive"
+                fi
                 cd /
                 rm -rf "$TMP_DIR"
-                info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version)"
-                return 0
+            else
+                warn "Failed to download from GitHub (URL may not exist for this architecture)"
             fi
-            cd /
-            rm -rf "$TMP_DIR"
+        else
+            warn "GitHub release URL not accessible (v${SINGBOX_PINNED_VERSION} may not have ${SAGERNET_ARCH} build)"
         fi
         warn "Failed to download pinned version, trying alternatives..."
     fi
@@ -411,26 +437,48 @@ install_singbox() {
     
     OPENWRT_MAJOR=$(echo "$OPENWRT_VERSION" | cut -d. -f1,2)
     
-    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.4" "23.05.3" "23.05.2"; do
+    # Try more ImmortalWRT versions
+    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.5" "23.05.4" "23.05.3" "23.05.2" "23.05.1" "23.05.0"; do
         IMMORTAL_BASE="https://downloads.immortalwrt.org/releases/${IMMORTAL_VER}/packages/${IMMORTAL_ARCH}/packages"
         
-        # Get package list and find sing-box
-        SINGBOX_PKG=$(curl -fsSL "${IMMORTAL_BASE}/Packages" 2>/dev/null | grep -A1 "^Package: sing-box$" | grep "Filename:" | awk '{print $2}')
+        # Try Packages.gz first, then Packages
+        PACKAGES_CONTENT=""
+        if curl -fsSL --max-time 10 "${IMMORTAL_BASE}/Packages.gz" 2>/dev/null | gunzip 2>/dev/null | head -1000 >/tmp/packages.txt 2>/dev/null; then
+            PACKAGES_CONTENT="/tmp/packages.txt"
+        elif curl -fsSL --max-time 10 "${IMMORTAL_BASE}/Packages" 2>/dev/null | head -1000 >/tmp/packages.txt 2>/dev/null; then
+            PACKAGES_CONTENT="/tmp/packages.txt"
+        fi
         
-        if [ -n "$SINGBOX_PKG" ]; then
-            SINGBOX_URL="${IMMORTAL_BASE}/${SINGBOX_PKG}"
-            TMP_PKG="/tmp/sing-box.ipk"
+        if [ -n "$PACKAGES_CONTENT" ] && [ -f "$PACKAGES_CONTENT" ]; then
+            # Get package list and find sing-box
+            SINGBOX_PKG=$(grep -A1 "^Package: sing-box$" "$PACKAGES_CONTENT" 2>/dev/null | grep "Filename:" | awk '{print $2}')
             
-            step "  Downloading from ImmortalWRT ${IMMORTAL_VER}..."
-            if download "$SINGBOX_URL" "$TMP_PKG"; then
-                opkg_silent install "$TMP_PKG"
-                rm -f "$TMP_PKG"
-                if command -v sing-box >/dev/null 2>&1; then
-                    INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-                    info "sing-box ${INSTALLED_VER:-unknown} installed (ImmortalWRT direct)"
-                    return 0
+            if [ -n "$SINGBOX_PKG" ]; then
+                SINGBOX_URL="${IMMORTAL_BASE}/${SINGBOX_PKG}"
+                TMP_PKG="/tmp/sing-box.ipk"
+                
+                step "  Downloading from ImmortalWRT ${IMMORTAL_VER}..."
+                if download "$SINGBOX_URL" "$TMP_PKG"; then
+                    if [ -f "$TMP_PKG" ] && [ -s "$TMP_PKG" ]; then
+                        opkg_silent install "$TMP_PKG"
+                        rm -f "$TMP_PKG" "/tmp/packages.txt"
+                        if command -v sing-box >/dev/null 2>&1; then
+                            INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                            info "sing-box ${INSTALLED_VER:-unknown} installed (ImmortalWRT direct)"
+                            return 0
+                        fi
+                    else
+                        warn "  Downloaded file is empty or invalid"
+                    fi
+                else
+                    warn "  Failed to download package from ${IMMORTAL_VER}"
                 fi
+            else
+                [ "$DEBUG" = "1" ] && warn "  sing-box not found in ${IMMORTAL_VER} repository" || true
             fi
+            rm -f "/tmp/packages.txt"
+        else
+            [ "$DEBUG" = "1" ] && warn "  Cannot access Packages file for ${IMMORTAL_VER}" || true
         fi
     done
     
@@ -451,7 +499,7 @@ install_singbox() {
     if [ -n "$SAGERNET_ARCH" ]; then
         step "Trying SagerNet latest release..."
         
-        LATEST_RELEASE=$(curl -fsSL "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
+        LATEST_RELEASE=$(curl -fsSL --max-time 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
         
         if [ -n "$LATEST_RELEASE" ]; then
             VERSION_NUM=$(echo "$LATEST_RELEASE" | sed 's/^v//')
@@ -461,27 +509,49 @@ install_singbox() {
             mkdir -p "$TMP_DIR"
             
             step "Downloading sing-box ${VERSION_NUM} from SagerNet..."
-            if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
-                cd "$TMP_DIR"
-                tar -xzf sing-box.tar.gz 2>/dev/null
-                
-                BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
-                if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-                    chmod +x "$BINARY_PATH"
-                    mv "$BINARY_PATH" /usr/bin/sing-box
+            if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
+                if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                    cd "$TMP_DIR"
+                    if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                        BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                        if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                            rm -f /usr/bin/sing-box 2>/dev/null
+                            chmod +x "$BINARY_PATH"
+                            mv "$BINARY_PATH" /usr/bin/sing-box
+                            cd /
+                            rm -rf "$TMP_DIR"
+                            info "sing-box $VERSION_NUM installed from SagerNet"
+                            return 0
+                        else
+                            warn "Binary not found in latest release archive"
+                        fi
+                    else
+                        warn "Failed to extract latest release archive"
+                    fi
                     cd /
                     rm -rf "$TMP_DIR"
-                    info "sing-box $VERSION_NUM installed from SagerNet"
-                    return 0
+                else
+                    warn "Failed to download latest release"
                 fi
-                cd /
-                rm -rf "$TMP_DIR"
+            else
+                warn "Latest release URL not accessible for ${SAGERNET_ARCH}"
             fi
+        else
+            warn "Could not fetch latest release info from GitHub"
         fi
     fi
     
+    # Final diagnostic info
+    echo ""
     warn "Could not install sing-box automatically"
-    warn "Please install manually: https://sing-box.sagernet.org/installation/from-source/"
+    echo "  Architecture detected: ${ARCH} (${IMMORTAL_ARCH:-unknown} / ${SAGERNET_ARCH:-unknown})"
+    echo "  OpenWRT version: ${OPENWRT_VERSION}"
+    echo ""
+    echo "  Troubleshooting:"
+    echo "  1. Check internet connection: ping -c 1 8.8.8.8"
+    echo "  2. Check if architecture is supported: uname -m"
+    echo "  3. Try manual installation: https://sing-box.sagernet.org/installation/from-source/"
+    echo "  4. For MIPS devices, try: opkg install sing-box (if repo available)"
     return 1
 }
 
