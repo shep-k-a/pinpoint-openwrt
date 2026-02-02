@@ -256,15 +256,6 @@ function clean_config_outbounds(config) {
 	return cleaned;
 }
 
-// Helper: run command and get output
-function run_cmd(cmd) {
-	let p = popen(cmd, 'r');
-	if (!p) return null;
-	let out = p.read('all');
-	p.close();
-	return out;
-}
-
 // Base64 decode using ucode built-in b64dec function
 function b64decode(str) {
 	if (!str) return null;
