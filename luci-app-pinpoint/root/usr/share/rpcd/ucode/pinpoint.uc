@@ -1377,8 +1377,9 @@ function get_system_info() {
 	let mem_info = run_cmd('free | grep Mem');
 	let mem_total = 0, mem_used = 0;
 	if (mem_info) {
-		let parts = split(trim(mem_info), /\s+/);
-		if (length(parts) >= 3) {
+		mem_info = trim(mem_info);
+		let parts = split(mem_info, /\s+/);
+		if (parts && length(parts) >= 3) {
 			mem_total = +parts[1] * 1024;
 			mem_used = +parts[2] * 1024;
 		}
@@ -1620,7 +1621,8 @@ function get_network_hosts() {
 	// Read DHCP leases
 	let leases = readfile('/tmp/dhcp.leases');
 	if (leases) {
-		let lines = split(trim(leases), '\n');
+		leases = trim(leases);
+		let lines = split(leases, '\n');
 		for (let line in lines) {
 			let parts = split(line, /\s+/);
 			if (length(parts) >= 4) {
@@ -1645,7 +1647,8 @@ function get_network_hosts() {
 	// Read ARP table for additional hosts
 	let arp = run_cmd('cat /proc/net/arp 2>/dev/null');
 	if (arp) {
-		let lines = split(trim(arp), '\n');
+		arp = trim(arp);
+		let lines = split(arp, '\n');
 		for (let i = 1; i < length(lines); i++) {
 			let parts = split(lines[i], /\s+/);
 			if (length(parts) >= 4) {
