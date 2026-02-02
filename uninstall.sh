@@ -189,15 +189,9 @@ rm -f /etc/dnsmasq.d/pinpoint-services.conf
 info "DNSmasq config removed"
 
 # ============================================
-# Restore DNSmasq to original (if was replaced)
+# Restore DNSmasq configuration (before package removal)
 # ============================================
-step "Restoring DNSmasq configuration..."
-
-# Check if dnsmasq-full was installed
-HAD_DNSMASQ_FULL=0
-if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
-    HAD_DNSMASQ_FULL=1
-fi
+step "Preparing DNSmasq configuration..."
 
 # Restore DNSmasq confdir if it was changed
 if uci get dhcp.@dnsmasq[0].confdir 2>/dev/null | grep -q "/tmp/dnsmasq.d"; then
@@ -224,7 +218,7 @@ if ! uci get dhcp.@dnsmasq[0].server >/dev/null 2>&1; then
     uci commit dhcp 2>/dev/null || true
 fi
 
-info "DNSmasq configuration restored"
+info "DNSmasq configuration prepared"
 
 # ============================================
 # Remove all PinPoint files
@@ -278,19 +272,20 @@ if opkg list-installed 2>/dev/null | grep -q "^nftables"; then
     fi
 fi
 
-# Remove dnsmasq-full (if installed) and restore original dnsmasq
+# Replace dnsmasq-full with original dnsmasq (atomic operation)
 if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
-    warn "dnsmasq-full was installed. Removing and restoring original dnsmasq..."
-    opkg remove dnsmasq-full --force-removal-of-dependent-packages >/dev/null 2>&1 || true
+    warn "dnsmasq-full was installed. Replacing with original dnsmasq..."
     
-    # Install original dnsmasq if available
+    # Check if original dnsmasq is available
     if opkg list 2>/dev/null | grep -q "^dnsmasq "; then
+        # Use opkg install with force-removal-of-dependent-packages
+        # This will remove dnsmasq-full and install dnsmasq atomically
         opkg update >/dev/null 2>&1 || true
-        opkg install dnsmasq >/dev/null 2>&1 || warn "Could not install original dnsmasq"
+        opkg install dnsmasq --force-removal-of-dependent-packages >/dev/null 2>&1 || warn "Could not replace dnsmasq-full with dnsmasq"
         
         # Ensure dnsmasq is configured and started
         if opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
-            # Configure basic DNS
+            # Configure basic DNS (if not already configured)
             uci set dhcp.@dnsmasq[0].noresolv='0' 2>/dev/null || true
             if ! uci get dhcp.@dnsmasq[0].server >/dev/null 2>&1; then
                 uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
@@ -301,10 +296,11 @@ if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
             # Start dnsmasq
             /etc/init.d/dnsmasq enable >/dev/null 2>&1 || true
             /etc/init.d/dnsmasq start >/dev/null 2>&1 || true
-            info "Original dnsmasq restored and started"
+            info "dnsmasq-full replaced with dnsmasq and started"
         fi
     else
-        warn "Original dnsmasq not available in repository"
+        warn "Original dnsmasq not available in repository, removing dnsmasq-full only"
+        opkg remove dnsmasq-full --force-removal-of-dependent-packages >/dev/null 2>&1 || warn "Could not remove dnsmasq-full"
     fi
 fi
 
