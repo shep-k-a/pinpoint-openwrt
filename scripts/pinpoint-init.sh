@@ -37,7 +37,8 @@ setup_policy_routing() {
     fi
     
     # Add policy rule: packets with mark go to table 100
-    ip rule add fwmark $MARK lookup $TABLE_ID priority 100
+    # Use priority 50 to ensure it's checked before main table (32766)
+    ip rule add fwmark $MARK lookup $TABLE_ID priority 50
     
     # Add default route via tun1 in table 100
     ip route add default dev $TUN_IFACE table $TABLE_ID

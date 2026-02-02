@@ -1348,7 +1348,7 @@ case "${1:-start}" in
         grep -q "^$TABLE_ID" /etc/iproute2/rt_tables 2>/dev/null || \
             echo "$TABLE_ID pinpoint" >> /etc/iproute2/rt_tables
         
-        ip rule add fwmark $MARK lookup $TABLE_ID priority 100
+        ip rule add fwmark $MARK lookup $TABLE_ID priority 50
         ip route add default dev $TUN_IFACE table $TABLE_ID
         
         # Setup nftables
