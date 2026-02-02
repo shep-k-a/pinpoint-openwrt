@@ -869,14 +869,14 @@ setup_authentication() {
     # Username
     DEFAULT_USER="admin"
     printf "  Username [${GREEN}$DEFAULT_USER${NC}]: "
-    read INPUT_USER
+    read INPUT_USER < /dev/tty
     USERNAME="${INPUT_USER:-$DEFAULT_USER}"
     
     # Password
     while true; do
         printf "  Password: "
         stty -echo 2>/dev/null || true
-        read PASSWORD
+        read PASSWORD < /dev/tty
         stty echo 2>/dev/null || true
         echo ""
         
@@ -892,7 +892,7 @@ setup_authentication() {
         
         printf "  Confirm password: "
         stty -echo 2>/dev/null || true
-        read PASSWORD2
+        read PASSWORD2 < /dev/tty
         stty echo 2>/dev/null || true
         echo ""
         
@@ -1738,7 +1738,7 @@ select_install_mode() {
     
     while true; do
         printf "  Select mode [1/2]: "
-        read MODE_CHOICE
+        read MODE_CHOICE < /dev/tty
         case "$MODE_CHOICE" in
             1|full|Full|FULL)
                 INSTALL_MODE="full"
