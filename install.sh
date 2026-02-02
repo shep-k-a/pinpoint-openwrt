@@ -238,8 +238,11 @@ setup_immortalwrt_repo() {
     OPENWRT_MAJOR=$(echo "$OPENWRT_VERSION" | cut -d. -f1,2)
     
     # Find working ImmortalWRT release (try more versions)
-    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.5" "23.05.4" "23.05.3" "23.05.2" "23.05.1" "23.05.0"; do
+    # Try 22.03 branch as well for older devices
+    for IMMORTAL_VER in "${OPENWRT_MAJOR}" "23.05.5" "23.05.4" "23.05.3" "23.05.2" "23.05.1" "23.05.0" "22.03.5" "22.03.4" "22.03.3"; do
         IMMORTAL_BASE="https://downloads.immortalwrt.org/releases/${IMMORTAL_VER}/packages/${IMMORTAL_ARCH}/packages"
+        
+        step "  Checking ImmortalWRT ${IMMORTAL_VER}..."
         
         # Test if repository is accessible (try both Packages.gz and Packages)
         if curl -fsSL --max-time 10 "${IMMORTAL_BASE}/Packages.gz" >/dev/null 2>&1 || \
@@ -248,8 +251,7 @@ setup_immortalwrt_repo() {
             info "Found accessible ImmortalWRT repository: ${IMMORTAL_VER}"
             break
         else
-            # Debug: show what we tried
-            [ "$DEBUG" = "1" ] && echo "  Trying ${IMMORTAL_VER}... failed" || true
+            warn "    ImmortalWRT ${IMMORTAL_VER} not accessible"
         fi
     done
     
@@ -577,16 +579,19 @@ install_singbox() {
     # =============================================
     # Method 6: Try older sing-box versions (for MIPS compatibility)
     # =============================================
-    if [ -n "$SAGERNET_ARCH_VARIANTS" ] && [ "$ARCH" = "mips" ] || [ "$ARCH" = "mipsel" ]; then
+    if [ -n "$SAGERNET_ARCH_VARIANTS" ] && ([ "$ARCH" = "mips" ] || [ "$ARCH" = "mipsel" ]); then
         step "Trying older sing-box versions (MIPS compatibility)..."
         
         # Try a few recent versions that might have MIPS builds
-        for OLD_VERSION in "1.10.0" "1.9.4" "1.9.0"; do
+        for OLD_VERSION in "1.10.0" "1.9.4" "1.9.0" "1.8.4" "1.8.0"; do
+            step "  Checking v${OLD_VERSION}..."
             for ARCH_VARIANT in $SAGERNET_ARCH_VARIANTS; do
                 BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${OLD_VERSION}/sing-box-${OLD_VERSION}-${ARCH_VARIANT}.tar.gz"
                 
+                step "    Trying v${OLD_VERSION} with ${ARCH_VARIANT}..."
+                
                 if curl -fsSL --max-time 10 --head "$BINARY_URL" >/dev/null 2>&1; then
-                    step "  Found v${OLD_VERSION} with ${ARCH_VARIANT}, downloading..."
+                    step "    Found v${OLD_VERSION} with ${ARCH_VARIANT}, downloading..."
                     TMP_DIR="/tmp/singbox_install"
                     mkdir -p "$TMP_DIR"
                     
@@ -603,23 +608,35 @@ install_singbox() {
                                 
                                 # Verify version meets minimum
                                 INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-                                if version_ge "$INSTALLED_VER" "$SINGBOX_MIN_VERSION"; then
+                                if [ -n "$INSTALLED_VER" ] && version_ge "$INSTALLED_VER" "$SINGBOX_MIN_VERSION"; then
                                     info "sing-box ${INSTALLED_VER} installed (older version, ${ARCH_VARIANT})"
                                     warn "Note: Using older version ${INSTALLED_VER} instead of pinned ${SINGBOX_PINNED_VERSION}"
                                     return 0
+                                elif [ -n "$INSTALLED_VER" ]; then
+                                    warn "Version ${INSTALLED_VER} is below minimum ${SINGBOX_MIN_VERSION}, trying next..."
+                                    rm -f /usr/bin/sing-box
                                 else
-                                    warn "Version ${INSTALLED_VER} is below minimum ${SINGBOX_MIN_VERSION}"
+                                    warn "Could not verify version, trying next..."
                                     rm -f /usr/bin/sing-box
                                 fi
+                            else
+                                warn "    Binary not found in archive"
                             fi
+                        else
+                            warn "    Failed to extract archive"
                         fi
                         cd /
                         rm -rf "$TMP_DIR"
+                    else
+                        warn "    Failed to download"
                     fi
-                    break  # Found working version, stop trying others
+                    break  # Found working URL, stop trying other arch variants for this version
+                else
+                    [ "$DEBUG" = "1" ] && warn "    URL not accessible" || true
                 fi
             done
         done
+        warn "No older versions found with MIPS builds"
     fi
     
     # Final diagnostic info
