@@ -1783,6 +1783,9 @@ print_success() {
     echo -e "  ${YELLOW}Note:${NC} On first login you will be redirected to"
     echo "        the Help section to get started."
     echo ""
+    echo -e "  ${RED}⚠ ВАЖНО: Рекомендуется перезагрузить роутер для применения всех изменений!${NC}"
+    echo -e "    ${CYAN}reboot${NC}"
+    echo ""
 }
 
 # ============================================
@@ -2172,6 +2175,9 @@ print_success_lite() {
     echo "    /etc/init.d/sing-box start"
     echo "    /etc/init.d/sing-box stop"
     echo "    /etc/init.d/sing-box restart"
+    echo ""
+    echo -e "  ${RED}⚠ ВАЖНО: Рекомендуется перезагрузить роутер для применения всех изменений!${NC}"
+    echo -e "    ${CYAN}reboot${NC}"
     echo ""
 }
 
