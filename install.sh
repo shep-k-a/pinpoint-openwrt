@@ -1508,8 +1508,60 @@ create_singbox_config() {
     
     mkdir -p /etc/sing-box
     
+    # Detect sing-box version to adapt config format
+    TUN_ADDRESS_FIELD="inet4_address"
+    if command -v sing-box >/dev/null 2>&1; then
+        SB_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$SB_VERSION" ]; then
+            # Check if version is < 1.11.0 (uses "address" instead of "inet4_address")
+            VERSION_MAJOR=$(echo "$SB_VERSION" | cut -d. -f1)
+            VERSION_MINOR=$(echo "$SB_VERSION" | cut -d. -f2)
+            if [ "$VERSION_MAJOR" -lt 1 ] || ([ "$VERSION_MAJOR" -eq 1 ] && [ "$VERSION_MINOR" -lt 11 ]); then
+                TUN_ADDRESS_FIELD="address"
+                info "Detected sing-box $SB_VERSION - using legacy 'address' field format"
+            else
+                info "Detected sing-box $SB_VERSION - using modern 'inet4_address' field format"
+            fi
+        fi
+    fi
+    
     # Create minimal config (will be updated by PinPoint when tunnels are added)
-    cat > /etc/sing-box/config.json << 'SBCONFIG'
+    if [ "$TUN_ADDRESS_FIELD" = "address" ]; then
+        cat > /etc/sing-box/config.json << 'SBCONFIG'
+{
+  "log": {"level": "info"},
+  "dns": {
+    "servers": [
+      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun1",
+      "address": ["10.0.0.1/30"],
+      "mtu": 1400,
+      "auto_route": false,
+      "sniff": true,
+      "stack": "gvisor"
+    }
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct-out"},
+    {"type": "dns", "tag": "dns-out"}
+  ],
+  "route": {
+    "rules": [
+      {"protocol": "dns", "outbound": "dns-out"}
+    ],
+    "auto_detect_interface": true
+  }
+}
+SBCONFIG
+    else
+        cat > /etc/sing-box/config.json << 'SBCONFIG'
 {
   "log": {"level": "info"},
   "dns": {
@@ -1542,8 +1594,9 @@ create_singbox_config() {
   }
 }
 SBCONFIG
+    fi
 
-    info "sing-box config created (add tunnels via PinPoint UI)"
+    info "sing-box config created (version-aware format, add tunnels via PinPoint UI)"
 }
 
 # ============================================
