@@ -71,6 +71,195 @@ function urldecode(str) {
 	return result;
 }
 
+// ===== IMPORT LINKS =====
+
+// Parse VPN link and extract outbound config
+function parse_vpn_link(link) {
+	// Wrap in try-catch to catch any exceptions
+	try {
+		link = trim(link);
+		if (!link) return null;
+		
+		let outbound = null;
+	
+	if (match(link, /^vless:\/\//)) {
+		// Parse VLESS link
+		let m = match(link, /^vless:\/\/([^@]+)@([^:]+):(\d+)/);
+		if (m) {
+			let uuid = m[1];
+			let server = m[2];
+			let port = +m[3];
+			
+			// Parse query params
+			let params = {};
+			let query_match = match(link, /\?([^#]+)/);
+			if (query_match) {
+				let pairs = split(query_match[1], '&');
+				for (let pair in pairs) {
+					let kv = split(pair, '=');
+					if (length(kv) == 2) {
+						params[kv[0]] = kv[1];
+					}
+				}
+			}
+			
+			// Get name from fragment
+			let name_match = match(link, /#(.+)$/);
+			let name = name_match ? urldecode(name_match[1]) : 'vless-' + server;
+			
+			outbound = {
+				type: 'vless',
+				tag: name,
+				server: server,
+				server_port: port,
+				uuid: uuid,
+				flow: params.flow || '',
+				tls: {
+					enabled: params.security == 'tls' || params.security == 'reality',
+					server_name: params.sni || server,
+					utls: { enabled: true, fingerprint: params.fp || 'chrome' }
+				}
+			};
+			
+			// Reality settings
+			if (params.security == 'reality') {
+				outbound.tls.reality = {
+					enabled: true,
+					public_key: params.pbk || '',
+					short_id: params.sid || ''
+				};
+			}
+			
+			// Transport
+			if (params.type == 'ws') {
+				outbound.transport = {
+					type: 'ws',
+					path: urldecode(params.path || '/'),
+					headers: { Host: params.host || server }
+				};
+			} else if (params.type == 'grpc') {
+				outbound.transport = {
+					type: 'grpc',
+					service_name: params.serviceName || ''
+				};
+			}
+		}
+	} else if (match(link, /^vmess:\/\//)) {
+		// Parse VMess link (base64 JSON)
+		let b64 = substr(link, 8);
+		let json_str = b64decode(b64);
+		if (json_str) {
+			try {
+				let cfg = json(json_str);
+				outbound = {
+					type: 'vmess',
+					tag: cfg.ps || 'vmess-' + cfg.add,
+					server: cfg.add,
+					server_port: +cfg.port,
+					uuid: cfg.id,
+					alter_id: +cfg.aid || 0,
+					security: cfg.scy || 'auto'
+				};
+				
+				if (cfg.tls == 'tls') {
+					outbound.tls = {
+						enabled: true,
+						server_name: cfg.sni || cfg.add
+					};
+				}
+				
+				if (cfg.net == 'ws') {
+					outbound.transport = {
+						type: 'ws',
+						path: cfg.path || '/',
+						headers: { Host: cfg.host || cfg.add }
+					};
+				}
+			} catch(e) {}
+		}
+	} else if (match(link, /^ss:\/\//)) {
+		// Parse Shadowsocks link
+		let rest = substr(link, 5);
+		let name = '';
+		let name_match = match(rest, /#(.+)$/);
+		if (name_match) {
+			name = urldecode(name_match[1]);
+			rest = substr(rest, 0, index(rest, '#'));
+		}
+		
+		// Try userinfo@host:port format
+		let m = match(rest, /^([^@]+)@([^:]+):(\d+)/);
+		if (m) {
+			let userinfo = b64decode(m[1]);
+			if (userinfo) {
+				let parts = split(trim(userinfo), ':');
+				if (length(parts) >= 2) {
+					outbound = {
+						type: 'shadowsocks',
+						tag: name || 'ss-' + m[2],
+						server: m[2],
+						server_port: +m[3],
+						method: parts[0],
+						password: parts[1]
+					};
+				}
+			}
+		}
+	} else if (match(link, /^trojan:\/\//)) {
+		// Parse Trojan link
+		let m = match(link, /^trojan:\/\/([^@]+)@([^:]+):(\d+)/);
+		if (m) {
+			let password = m[1];
+			let server = m[2];
+			let port = +m[3];
+			
+			let name_match = match(link, /#(.+)$/);
+			let name = name_match ? urldecode(name_match[1]) : 'trojan-' + server;
+			
+			outbound = {
+				type: 'trojan',
+				tag: name,
+				server: server,
+				server_port: port,
+				password: password,
+				tls: {
+					enabled: true,
+					server_name: server
+				}
+			};
+		}
+	} else if (match(link, /^hysteria2:\/\// ) || match(link, /^hy2:\/\//)) {
+		// Parse Hysteria2 link
+		let m = match(link, /^(?:hysteria2|hy2):\/\/([^@]+)@([^:]+):(\d+)/);
+		if (m) {
+			let password = m[1];
+			let server = m[2];
+			let port = +m[3];
+			
+			let name_match = match(link, /#(.+)$/);
+			let name = name_match ? urldecode(name_match[1]) : 'hy2-' + server;
+			
+			outbound = {
+				type: 'hysteria2',
+				tag: name,
+				server: server,
+				server_port: port,
+				password: password,
+				tls: {
+					enabled: true,
+					server_name: server
+				}
+			};
+		}
+	}
+	
+	return outbound;
+	} catch(e) {
+		// Return null on any error
+		return null;
+	}
+}
+
 // Get VPN status
 function get_status() {
 	// Check if tun1 is up
@@ -878,195 +1067,6 @@ function get_system_info() {
 		services_count: services_count,
 		last_update: status ? status.last_update : null
 	};
-}
-
-// ===== IMPORT LINKS =====
-
-// Parse VPN link and extract outbound config
-function parse_vpn_link(link) {
-	// Wrap in try-catch to catch any exceptions
-	try {
-		link = trim(link);
-		if (!link) return null;
-		
-		let outbound = null;
-	
-	if (match(link, /^vless:\/\//)) {
-		// Parse VLESS link
-		let m = match(link, /^vless:\/\/([^@]+)@([^:]+):(\d+)/);
-		if (m) {
-			let uuid = m[1];
-			let server = m[2];
-			let port = +m[3];
-			
-			// Parse query params
-			let params = {};
-			let query_match = match(link, /\?([^#]+)/);
-			if (query_match) {
-				let pairs = split(query_match[1], '&');
-				for (let pair in pairs) {
-					let kv = split(pair, '=');
-					if (length(kv) == 2) {
-						params[kv[0]] = kv[1];
-					}
-				}
-			}
-			
-			// Get name from fragment
-			let name_match = match(link, /#(.+)$/);
-			let name = name_match ? urldecode(name_match[1]) : 'vless-' + server;
-			
-			outbound = {
-				type: 'vless',
-				tag: name,
-				server: server,
-				server_port: port,
-				uuid: uuid,
-				flow: params.flow || '',
-				tls: {
-					enabled: params.security == 'tls' || params.security == 'reality',
-					server_name: params.sni || server,
-					utls: { enabled: true, fingerprint: params.fp || 'chrome' }
-				}
-			};
-			
-			// Reality settings
-			if (params.security == 'reality') {
-				outbound.tls.reality = {
-					enabled: true,
-					public_key: params.pbk || '',
-					short_id: params.sid || ''
-				};
-			}
-			
-			// Transport
-			if (params.type == 'ws') {
-				outbound.transport = {
-					type: 'ws',
-					path: urldecode(params.path || '/'),
-					headers: { Host: params.host || server }
-				};
-			} else if (params.type == 'grpc') {
-				outbound.transport = {
-					type: 'grpc',
-					service_name: params.serviceName || ''
-				};
-			}
-		}
-	} else if (match(link, /^vmess:\/\//)) {
-		// Parse VMess link (base64 JSON)
-		let b64 = substr(link, 8);
-		let json_str = b64decode(b64);
-		if (json_str) {
-			try {
-				let cfg = json(json_str);
-				outbound = {
-					type: 'vmess',
-					tag: cfg.ps || 'vmess-' + cfg.add,
-					server: cfg.add,
-					server_port: +cfg.port,
-					uuid: cfg.id,
-					alter_id: +cfg.aid || 0,
-					security: cfg.scy || 'auto'
-				};
-				
-				if (cfg.tls == 'tls') {
-					outbound.tls = {
-						enabled: true,
-						server_name: cfg.sni || cfg.add
-					};
-				}
-				
-				if (cfg.net == 'ws') {
-					outbound.transport = {
-						type: 'ws',
-						path: cfg.path || '/',
-						headers: { Host: cfg.host || cfg.add }
-					};
-				}
-			} catch(e) {}
-		}
-	} else if (match(link, /^ss:\/\//)) {
-		// Parse Shadowsocks link
-		let rest = substr(link, 5);
-		let name = '';
-		let name_match = match(rest, /#(.+)$/);
-		if (name_match) {
-			name = urldecode(name_match[1]);
-			rest = substr(rest, 0, index(rest, '#'));
-		}
-		
-		// Try userinfo@host:port format
-		let m = match(rest, /^([^@]+)@([^:]+):(\d+)/);
-		if (m) {
-			let userinfo = b64decode(m[1]);
-			if (userinfo) {
-				let parts = split(trim(userinfo), ':');
-				if (length(parts) >= 2) {
-					outbound = {
-						type: 'shadowsocks',
-						tag: name || 'ss-' + m[2],
-						server: m[2],
-						server_port: +m[3],
-						method: parts[0],
-						password: parts[1]
-					};
-				}
-			}
-		}
-	} else if (match(link, /^trojan:\/\//)) {
-		// Parse Trojan link
-		let m = match(link, /^trojan:\/\/([^@]+)@([^:]+):(\d+)/);
-		if (m) {
-			let password = m[1];
-			let server = m[2];
-			let port = +m[3];
-			
-			let name_match = match(link, /#(.+)$/);
-			let name = name_match ? urldecode(name_match[1]) : 'trojan-' + server;
-			
-			outbound = {
-				type: 'trojan',
-				tag: name,
-				server: server,
-				server_port: port,
-				password: password,
-				tls: {
-					enabled: true,
-					server_name: server
-				}
-			};
-		}
-	} else if (match(link, /^hysteria2:\/\// ) || match(link, /^hy2:\/\//)) {
-		// Parse Hysteria2 link
-		let m = match(link, /^(?:hysteria2|hy2):\/\/([^@]+)@([^:]+):(\d+)/);
-		if (m) {
-			let password = m[1];
-			let server = m[2];
-			let port = +m[3];
-			
-			let name_match = match(link, /#(.+)$/);
-			let name = name_match ? urldecode(name_match[1]) : 'hy2-' + server;
-			
-			outbound = {
-				type: 'hysteria2',
-				tag: name,
-				server: server,
-				server_port: port,
-				password: password,
-				tls: {
-					enabled: true,
-					server_name: server
-				}
-			};
-		}
-	}
-	
-	return outbound;
-	} catch(e) {
-		// Return null on any error
-		return null;
-	}
 }
 
 // Import single VPN link
