@@ -121,8 +121,9 @@ function clean_config_outbounds(config) {
 			let use_legacy_format = false;
 			
 			if (sb_version) {
-				let version_parts = split(trim(sb_version), '.');
-				if (length(version_parts) >= 2) {
+				sb_version = trim(sb_version);
+				let version_parts = split(sb_version, '.');
+				if (version_parts && length(version_parts) >= 2) {
 					let major = int(version_parts[0]);
 					let minor = int(version_parts[1]);
 					// Versions < 1.11.0 use "address" instead of "inet4_address"
