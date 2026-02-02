@@ -222,8 +222,13 @@ function clean_config_outbounds(config) {
 	}
 	
 	// Set final outbound to first VPN tunnel (if exists)
-	if (length(vpn_outbounds) > 0 && vpn_outbounds[0].tag) {
-		cleaned.route.final = vpn_outbounds[0].tag;
+	if (vpn_outbounds && length(vpn_outbounds) > 0) {
+		let first_vpn = vpn_outbounds[0];
+		if (first_vpn && first_vpn.tag) {
+			cleaned.route.final = first_vpn.tag;
+		} else {
+			cleaned.route.final = 'direct-out';
+		}
 	} else {
 		// Fallback to auto if no VPN tunnels
 		cleaned.route.final = 'direct-out';
