@@ -81,7 +81,14 @@ table inet pinpoint {
         # Skip local/private networks
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
         
-        # Mark packets destined to tunnel IPs (raw priority marks BEFORE routing decision)
+        # Mark connection for tunnel IPs (so response packets are also marked)
+        ip daddr @tunnel_ips ct mark set 0x1 counter
+        ip daddr @tunnel_nets ct mark set 0x1 counter
+        
+        # Mark packets based on connection mark (for response packets)
+        ct mark 0x1 meta mark set 0x1 counter
+        
+        # Mark packets destined to tunnel IPs (for new connections)
         ip daddr @tunnel_ips meta mark set 0x1 counter
         ip daddr @tunnel_nets meta mark set 0x1 counter
     }

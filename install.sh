@@ -1361,6 +1361,9 @@ table inet pinpoint {
     chain prerouting {
         type filter hook prerouting priority raw - 1; policy accept;
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
+        ip daddr @tunnel_ips ct mark set 0x1 counter
+        ip daddr @tunnel_nets ct mark set 0x1 counter
+        ct mark 0x1 meta mark set 0x1 counter
         ip daddr @tunnel_ips meta mark set 0x1 counter
         ip daddr @tunnel_nets meta mark set 0x1 counter
     }
