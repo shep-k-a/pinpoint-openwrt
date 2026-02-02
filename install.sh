@@ -1799,7 +1799,14 @@ install_luci_app() {
     [ -f /opt/pinpoint/data/subscriptions.json ] || echo '{"subscriptions":[]}' > /opt/pinpoint/data/subscriptions.json
     [ -f /opt/pinpoint/data/settings.json ] || echo '{"auto_update":true,"update_interval":21600}' > /opt/pinpoint/data/settings.json
     [ -f /opt/pinpoint/data/devices.json ] || echo '{"devices":[]}' > /opt/pinpoint/data/devices.json
-    [ -f /etc/config/pinpoint ] || touch /etc/config/pinpoint
+    
+    # Create UCI config if not exists (required for menu)
+    if [ ! -f /etc/config/pinpoint ]; then
+        touch /etc/config/pinpoint
+        uci set pinpoint.@pinpoint[0]=pinpoint 2>/dev/null || uci add pinpoint pinpoint 2>/dev/null || true
+        uci set pinpoint.@pinpoint[0].enabled='1' 2>/dev/null || true
+        uci commit pinpoint 2>/dev/null || true
+    fi
     info "Data files initialized"
     
     # Create sing-box config if not exists

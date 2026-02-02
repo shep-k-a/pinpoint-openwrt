@@ -2,11 +2,11 @@
 	"admin/vpn/pinpoint": {
 		"title": "PinPoint",
 		"action": {
-			"type": "firstchild"
+			"type": "view",
+			"path": "pinpoint/status"
 		},
 		"depends": {
-			"acl": ["luci-app-pinpoint"],
-			"uci": {"pinpoint": true}
+			"acl": ["luci-app-pinpoint"]
 		},
 		"order": 60
 	},
