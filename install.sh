@@ -3,18 +3,40 @@
 # PinPoint - Selective VPN Routing for OpenWRT
 # Installation Script
 #
-# Usage (choose one):
+# Usage:
 #   curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 #   wget -qO- https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 #
-# Interactive mode (download first):
-#   curl -fsSL .../install.sh -o /tmp/install.sh && sh /tmp/install.sh
-#   wget -qO /tmp/install.sh .../install.sh && sh /tmp/install.sh
+# With mode specified:
+#   curl -fsSL .../install.sh | sh -s -- lite
+#   curl -fsSL .../install.sh | sh -s -- full
 #
 # Requirements: OpenWRT 23.05.0 or later
 #
 
 set -e
+
+# ============================================
+# Auto-download for interactive mode when piped
+# ============================================
+SCRIPT_URL="https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh"
+
+# Check if running from pipe and no mode specified
+if [ ! -t 0 ] && [ -z "$1" ]; then
+    # Running from pipe without arguments - download and re-execute for interactive mode
+    TEMP_SCRIPT="/tmp/pinpoint_install_$$.sh"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$SCRIPT_URL" -o "$TEMP_SCRIPT"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$TEMP_SCRIPT" "$SCRIPT_URL"
+    else
+        echo "Error: curl or wget required"
+        exit 1
+    fi
+    chmod +x "$TEMP_SCRIPT"
+    exec sh "$TEMP_SCRIPT" "$@"
+    exit 0
+fi
 
 # ============================================
 # Configuration
@@ -869,14 +891,14 @@ setup_authentication() {
     # Username
     DEFAULT_USER="admin"
     printf "  Username [${GREEN}$DEFAULT_USER${NC}]: "
-    read INPUT_USER < /dev/tty
+    read INPUT_USER
     USERNAME="${INPUT_USER:-$DEFAULT_USER}"
     
     # Password
     while true; do
         printf "  Password: "
         stty -echo 2>/dev/null || true
-        read PASSWORD < /dev/tty
+        read PASSWORD
         stty echo 2>/dev/null || true
         echo ""
         
@@ -892,7 +914,7 @@ setup_authentication() {
         
         printf "  Confirm password: "
         stty -echo 2>/dev/null || true
-        read PASSWORD2 < /dev/tty
+        read PASSWORD2
         stty echo 2>/dev/null || true
         echo ""
         
@@ -1738,7 +1760,7 @@ select_install_mode() {
     
     while true; do
         printf "  Select mode [1/2]: "
-        read MODE_CHOICE < /dev/tty
+        read MODE_CHOICE
         case "$MODE_CHOICE" in
             1|full|Full|FULL)
                 INSTALL_MODE="full"
