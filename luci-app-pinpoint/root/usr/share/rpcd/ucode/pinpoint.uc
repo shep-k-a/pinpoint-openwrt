@@ -549,6 +549,9 @@ function add_subscription(params) {
 
 // Update all subscriptions
 function update_subscriptions() {
+	// Ensure parse_vpn_link is accessible
+	let parse_fn = parse_vpn_link;
+	
 	try {
 		let subs = read_json(SUBSCRIPTIONS_FILE);
 		if (!subs || !subs.subscriptions || length(subs.subscriptions) == 0) {
@@ -651,7 +654,7 @@ function update_subscriptions() {
 				link = trim(link);
 				if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
 				
-				let outbound = parse_vpn_link(link);
+				let outbound = parse_fn(link);
 				if (outbound && outbound.tag) {
 					outbound._subscription = sub.id;
 					
