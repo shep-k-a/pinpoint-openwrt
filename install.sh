@@ -1680,6 +1680,12 @@ start_service() {
     # Initialize routing and load services
     step "Initializing routing..."
     
+    # Install Python if not available (needed for pinpoint-update.py)
+    if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+        step "Installing Python..."
+        install_package "python3" "Python 3" || install_package "python" "Python" || warn "Python not available, services update may fail"
+    fi
+    
     # Copy nftables config file
     if [ -f "$PINPOINT_DIR/scripts/pinpoint-init.sh" ]; then
         # Create nftables config file for pinpoint-init.sh
@@ -1700,8 +1706,14 @@ start_service() {
     
     # Update services to load IPs into nftables sets
     if [ -f "$PINPOINT_DIR/scripts/pinpoint-update.py" ]; then
-        python3 "$PINPOINT_DIR/scripts/pinpoint-update.py" update >/dev/null 2>&1 || true
-        info "Services and routing initialized"
+        PYTHON_CMD="python3"
+        command -v python3 >/dev/null 2>&1 || PYTHON_CMD="python"
+        if command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+            "$PYTHON_CMD" "$PINPOINT_DIR/scripts/pinpoint-update.py" update >/dev/null 2>&1 || true
+            info "Services and routing initialized"
+        else
+            warn "Python not found, services update skipped (run manually: $PINPOINT_DIR/scripts/pinpoint-update.py update)"
+        fi
     fi
 }
 
