@@ -1920,9 +1920,9 @@ install_luci_app() {
         "/usr/share/rpcd/acl.d/luci-app-pinpoint.json" || error "Failed to download ACL"
     info "Menu and ACL downloaded"
     
-    step "Downloading update script..."
+    step "Downloading update script (shell version for Lite mode)..."
     download "$GITHUB_REPO/luci-app-pinpoint/root/opt/pinpoint/scripts/pinpoint-update.sh" \
-        "/opt/pinpoint/scripts/pinpoint-update.sh" || true
+        "/opt/pinpoint/scripts/pinpoint-update.sh" || error "Failed to download pinpoint-update.sh"
     chmod +x /opt/pinpoint/scripts/*.sh 2>/dev/null || true
     info "Scripts downloaded"
     
@@ -1932,10 +1932,21 @@ install_luci_app() {
     
     # Initialize data files
     step "Initializing data files..."
+    mkdir -p /opt/pinpoint/data
     [ -f /opt/pinpoint/data/custom_services.json ] || echo '{"services":[]}' > /opt/pinpoint/data/custom_services.json
     [ -f /opt/pinpoint/data/subscriptions.json ] || echo '{"subscriptions":[]}' > /opt/pinpoint/data/subscriptions.json
     [ -f /opt/pinpoint/data/settings.json ] || echo '{"auto_update":true,"update_interval":21600}' > /opt/pinpoint/data/settings.json
     [ -f /opt/pinpoint/data/devices.json ] || echo '{"devices":[]}' > /opt/pinpoint/data/devices.json
+    [ -f /opt/pinpoint/data/services.json ] || download "$GITHUB_REPO/data/services.json" "/opt/pinpoint/data/services.json" || echo '{"services":[]}' > /opt/pinpoint/data/services.json
+    
+    # Copy nftables config file
+    step "Setting up nftables config..."
+    download "$GITHUB_REPO/etc/nftables.d/pinpoint.nft" "/opt/pinpoint/data/pinpoint.nft" || warn "Failed to download pinpoint.nft"
+    if [ -f /opt/pinpoint/data/pinpoint.nft ]; then
+        info "nftables config file ready"
+    else
+        warn "nftables config file not found, will be created by pinpoint-init.sh"
+    fi
     
     # Create UCI config if not exists (required for menu)
     if [ ! -f /etc/config/pinpoint ]; then
