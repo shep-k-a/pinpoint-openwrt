@@ -488,18 +488,23 @@ function update_subscriptions() {
 				}
 			}
 			
-			// Update subscription metadata
-			subs.subscriptions[i].nodes = nodes_count;
-			subs.subscriptions[i].updated = trim(run_cmd('date "+%Y-%m-%d %H:%M:%S"'));
-			subs.subscriptions[i].last_update = time();
+		// Update subscription metadata
+		subs.subscriptions[i].nodes = nodes_count;
+		let date_cmd = run_cmd('date "+%Y-%m-%d %H:%M:%S"');
+		subs.subscriptions[i].updated = date_cmd ? trim(date_cmd) : null;
+		subs.subscriptions[i].last_update = time();
 		}
 		
 		// Save updated config and subscriptions
-		write_json('/etc/sing-box/config.json', config);
-		write_json(SUBSCRIPTIONS_FILE, subs);
+		if (!write_json('/etc/sing-box/config.json', config)) {
+			return { success: false, error: 'Failed to save sing-box config' };
+		}
+		if (!write_json(SUBSCRIPTIONS_FILE, subs)) {
+			return { success: false, error: 'Failed to save subscriptions' };
+		}
 		
-		// Restart sing-box
-		run_cmd('/etc/init.d/sing-box restart 2>&1');
+		// Restart sing-box (run in background, don't wait)
+		run_cmd('/etc/init.d/sing-box restart >/dev/null 2>&1 &');
 		
 		return { 
 			success: true, 
@@ -509,7 +514,7 @@ function update_subscriptions() {
 	} catch(e) {
 		return { 
 			success: false, 
-			error: 'Update failed: ' + e
+			error: 'Update failed: ' + (e ? e : 'unknown error')
 		};
 	}
 }
