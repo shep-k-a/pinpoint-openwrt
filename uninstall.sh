@@ -278,9 +278,34 @@ if opkg list-installed 2>/dev/null | grep -q "^nftables"; then
     fi
 fi
 
-# Remove dnsmasq-full (if installed)
+# Remove dnsmasq-full (if installed) and restore original dnsmasq
 if opkg list-installed 2>/dev/null | grep -q "^dnsmasq-full "; then
-    opkg remove dnsmasq-full --force-removal-of-dependent-packages >/dev/null 2>&1 || warn "Could not remove dnsmasq-full"
+    warn "dnsmasq-full was installed. Removing and restoring original dnsmasq..."
+    opkg remove dnsmasq-full --force-removal-of-dependent-packages >/dev/null 2>&1 || true
+    
+    # Install original dnsmasq if available
+    if opkg list 2>/dev/null | grep -q "^dnsmasq "; then
+        opkg update >/dev/null 2>&1 || true
+        opkg install dnsmasq >/dev/null 2>&1 || warn "Could not install original dnsmasq"
+        
+        # Ensure dnsmasq is configured and started
+        if opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
+            # Configure basic DNS
+            uci set dhcp.@dnsmasq[0].noresolv='0' 2>/dev/null || true
+            if ! uci get dhcp.@dnsmasq[0].server >/dev/null 2>&1; then
+                uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+                uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+            fi
+            uci commit dhcp 2>/dev/null || true
+            
+            # Start dnsmasq
+            /etc/init.d/dnsmasq enable >/dev/null 2>&1 || true
+            /etc/init.d/dnsmasq start >/dev/null 2>&1 || true
+            info "Original dnsmasq restored and started"
+        fi
+    else
+        warn "Original dnsmasq not available in repository"
+    fi
 fi
 
 # Remove https-dns-proxy (if installed)
