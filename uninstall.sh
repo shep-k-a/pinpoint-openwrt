@@ -137,9 +137,18 @@ fi
 
 # Restore firewall forwarding and NAT to prevent internet loss
 step "Restoring firewall forwarding and NAT..."
+
+# Ensure firewall forwarding is ACCEPT
 uci set firewall.@defaults[0].forward='ACCEPT' 2>/dev/null || true
 uci commit firewall 2>/dev/null || true
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+
+# Install nftables if missing (needed for NAT)
+if ! command -v nft >/dev/null 2>&1; then
+    warn "nftables not found, installing..."
+    opkg update >/dev/null 2>&1 || true
+    opkg install nftables >/dev/null 2>&1 || warn "Could not install nftables"
+fi
 
 # Ensure NAT is configured (create fw4 table if missing)
 if command -v nft >/dev/null 2>&1; then
