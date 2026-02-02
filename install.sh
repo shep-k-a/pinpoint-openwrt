@@ -1679,6 +1679,26 @@ start_service() {
     
     # Initialize routing and load services
     step "Initializing routing..."
+    
+    # Copy nftables config file
+    if [ -f "$PINPOINT_DIR/scripts/pinpoint-init.sh" ]; then
+        # Create nftables config file for pinpoint-init.sh
+        mkdir -p "$PINPOINT_DIR/data"
+        if [ -f "/etc/nftables.d/pinpoint.nft" ]; then
+            cp /etc/nftables.d/pinpoint.nft "$PINPOINT_DIR/data/pinpoint.nft"
+        else
+            # Create from etc/nftables.d/pinpoint.nft if available
+            download "$GITHUB_REPO/etc/nftables.d/pinpoint.nft" "$PINPOINT_DIR/data/pinpoint.nft" || true
+        fi
+    fi
+    
+    # Run pinpoint-init.sh to setup nftables and routing
+    if [ -f "$PINPOINT_DIR/scripts/pinpoint-init.sh" ]; then
+        chmod +x "$PINPOINT_DIR/scripts/pinpoint-init.sh"
+        "$PINPOINT_DIR/scripts/pinpoint-init.sh" start >/dev/null 2>&1 || true
+    fi
+    
+    # Update services to load IPs into nftables sets
     if [ -f "$PINPOINT_DIR/scripts/pinpoint-update.py" ]; then
         python3 "$PINPOINT_DIR/scripts/pinpoint-update.py" update >/dev/null 2>&1 || true
         info "Services and routing initialized"
