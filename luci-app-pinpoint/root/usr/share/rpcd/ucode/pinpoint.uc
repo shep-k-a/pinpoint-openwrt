@@ -174,6 +174,28 @@ function clean_config_outbounds(config) {
 		cleaned.route.rules = new_rules;
 	}
 	
+	// Fix DNS configuration to prevent loopback
+	if (cleaned.dns && cleaned.dns.servers) {
+		for (let server in cleaned.dns.servers) {
+			// If DNS server doesn't have detour, add direct-out to prevent loopback
+			if (!server.detour && server.address && !server.address.match(/^127\./)) {
+				server.detour = 'direct-out';
+			}
+			// For local DNS (127.0.0.1), ensure it uses direct-out
+			if (server.address && server.address.match(/^127\./)) {
+				server.detour = 'direct-out';
+			}
+		}
+	} else if (!cleaned.dns) {
+		// Create default DNS config if missing
+		cleaned.dns = {
+			servers: [
+				{ tag: 'google', address: '8.8.8.8', detour: 'direct-out' },
+				{ tag: 'local', address: '127.0.0.1', detour: 'direct-out' }
+			]
+		};
+	}
+	
 	return cleaned;
 }
 
