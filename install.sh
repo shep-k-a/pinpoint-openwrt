@@ -2007,6 +2007,7 @@ install_luci_app() {
   ],
   "route": {
     "rules": [{"protocol": "dns", "outbound": "dns-out"}],
+    "final": "direct-out",
     "auto_detect_interface": true
   }
 }
@@ -2039,6 +2040,7 @@ SBCFG
   ],
   "route": {
     "rules": [{"protocol": "dns", "outbound": "dns-out"}],
+    "final": "direct-out",
     "auto_detect_interface": true
   }
 }
