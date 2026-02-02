@@ -358,6 +358,32 @@ if opkg list-installed 2>/dev/null | grep -q "^https-dns-proxy "; then
     opkg remove https-dns-proxy --force-removal-of-dependent-packages >/dev/null 2>&1 || warn "Could not remove https-dns-proxy"
 fi
 
+# Ensure dnsmasq is installed and running (critical for internet)
+if ! opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
+    warn "dnsmasq not found, installing..."
+    opkg update >/dev/null 2>&1 || true
+    opkg install dnsmasq >/dev/null 2>&1 || warn "Could not install dnsmasq"
+    
+    # Configure and start if installed
+    if opkg list-installed 2>/dev/null | grep -q "^dnsmasq "; then
+        uci set dhcp.@dnsmasq[0].noresolv='0' 2>/dev/null || true
+        if ! uci get dhcp.@dnsmasq[0].server >/dev/null 2>&1; then
+            uci add_list dhcp.@dnsmasq[0].server='8.8.8.8' 2>/dev/null || true
+            uci add_list dhcp.@dnsmasq[0].server='1.1.1.1' 2>/dev/null || true
+        fi
+        uci commit dhcp 2>/dev/null || true
+        /etc/init.d/dnsmasq enable >/dev/null 2>&1 || true
+        /etc/init.d/dnsmasq start >/dev/null 2>&1 || true
+        info "dnsmasq installed and started"
+    fi
+else
+    # Ensure dnsmasq is running
+    if ! pgrep dnsmasq >/dev/null 2>&1; then
+        /etc/init.d/dnsmasq start >/dev/null 2>&1 || true
+        info "dnsmasq restarted"
+    fi
+fi
+
 # Remove Python packages (Full mode only - be careful, might be used by other apps)
 # Only remove if we're sure they were installed for PinPoint
 if [ -f "$PINPOINT_DIR/data/requirements.txt" ] 2>/dev/null; then
