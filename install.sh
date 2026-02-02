@@ -2288,6 +2288,23 @@ main() {
         install_hotplug_scripts
         install_cron_jobs
         setup_firewall
+        
+        # Initialize routing and services after all scripts are created
+        step "Initializing routing and services..."
+        
+        # Run pinpoint-init.sh to setup nftables and routing
+        if [ -f /opt/pinpoint/scripts/pinpoint-init.sh ]; then
+            /opt/pinpoint/scripts/pinpoint-init.sh start >/dev/null 2>&1 || true
+        fi
+        
+        # Run pinpoint-update.sh to update services (shell version, no Python needed)
+        if [ -f /opt/pinpoint/scripts/pinpoint-update.sh ]; then
+            /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 || true
+            info "Services and routing initialized"
+        else
+            warn "pinpoint-update.sh not found, services update skipped"
+        fi
+        
         cleanup_install
         print_success_lite
     else
