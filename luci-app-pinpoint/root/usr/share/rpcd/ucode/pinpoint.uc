@@ -838,6 +838,8 @@ function add_subscription(params) {
 	write_json(SUBSCRIPTIONS_FILE, subs);
 	
 	// Automatically update the newly added subscription
+	// Use a small delay to ensure file is written
+	run_cmd('sleep 0.5');
 	let update_result = update_subscriptions();
 	
 	if (update_result && update_result.success) {
@@ -845,15 +847,17 @@ function add_subscription(params) {
 			success: true, 
 			id: id,
 			updated: true,
-			nodes: update_result.total_updated || 0
+			nodes: update_result.total_updated || 0,
+			message: 'Подписка добавлена и обновлена'
 		};
 	} else {
-		// Subscription added but update failed
+		// Subscription added but update failed - return success with warning
 		return { 
 			success: true, 
 			id: id,
 			updated: false,
-			update_error: update_result ? update_result.error : 'Unknown error'
+			update_error: update_result ? update_result.error : 'Unknown error',
+			message: 'Подписка добавлена, но обновление не удалось. Нажмите "Обновить подписки" вручную.'
 		};
 	}
 }
