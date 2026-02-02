@@ -124,7 +124,36 @@ if nft list table inet fw4 >/dev/null 2>&1; then
     done
 fi
 
-info "Routing and firewall rules removed"
+# Restore firewall forwarding and NAT to prevent internet loss
+step "Restoring firewall forwarding and NAT..."
+uci set firewall.@defaults[0].forward='ACCEPT' 2>/dev/null || true
+uci commit firewall 2>/dev/null || true
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+
+# Ensure NAT is configured (create fw4 table if missing)
+if command -v nft >/dev/null 2>&1; then
+    if ! nft list table inet fw4 >/dev/null 2>&1; then
+        nft create table inet fw4 >/dev/null 2>&1 || true
+        nft create chain inet fw4 input '{ type filter hook input priority filter; policy accept; }' >/dev/null 2>&1 || true
+        nft create chain inet fw4 forward '{ type filter hook forward priority filter; policy accept; }' >/dev/null 2>&1 || true
+        nft create chain inet fw4 output '{ type filter hook output priority filter; policy accept; }' >/dev/null 2>&1 || true
+        nft create chain inet fw4 srcnat '{ type nat hook postrouting priority srcnat; policy accept; }' >/dev/null 2>&1 || true
+        
+        # Add masquerade for WAN
+        WAN_IF=$(ip route show default 2>/dev/null | awk '{print $5}' | head -1)
+        [ -z "$WAN_IF" ] && WAN_IF=$(uci get network.wan.ifname 2>/dev/null || echo "wan")
+        nft add rule inet fw4 srcnat oifname "$WAN_IF" masquerade >/dev/null 2>&1 || true
+    else
+        # Ensure masquerade exists in srcnat
+        if ! nft list chain inet fw4 srcnat 2>/dev/null | grep -q masquerade; then
+            WAN_IF=$(ip route show default 2>/dev/null | awk '{print $5}' | head -1)
+            [ -z "$WAN_IF" ] && WAN_IF=$(uci get network.wan.ifname 2>/dev/null || echo "wan")
+            nft add rule inet fw4 srcnat oifname "$WAN_IF" masquerade >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
+info "Routing and firewall rules removed, NAT restored"
 
 # ============================================
 # Remove init scripts
