@@ -320,26 +320,34 @@ detect_package_arch() {
     case "$ARCH" in
         mips)
             IMMORTAL_ARCH="mips_24kc"
-            SAGERNET_ARCH="linux-mips-softfloat"
+            # Try multiple MIPS variants (softfloat, hardfloat, generic)
+            SAGERNET_ARCH_VARIANTS="linux-mips-softfloat linux-mips-hardfloat linux-mips"
+            SAGERNET_ARCH="linux-mips-softfloat"  # Default
             ;;
         mipsel)
             IMMORTAL_ARCH="mipsel_24kc"
-            SAGERNET_ARCH="linux-mipsle-softfloat"
+            # Try multiple MIPSLE variants
+            SAGERNET_ARCH_VARIANTS="linux-mipsle-softfloat linux-mipsle-hardfloat linux-mipsle"
+            SAGERNET_ARCH="linux-mipsle-softfloat"  # Default
             ;;
         aarch64)
             IMMORTAL_ARCH="aarch64_cortex-a53"
+            SAGERNET_ARCH_VARIANTS="linux-arm64"
             SAGERNET_ARCH="linux-arm64"
             ;;
         armv7l|armv7)
             IMMORTAL_ARCH="arm_cortex-a7_neon-vfpv4"
+            SAGERNET_ARCH_VARIANTS="linux-armv7"
             SAGERNET_ARCH="linux-armv7"
             ;;
         x86_64)
             IMMORTAL_ARCH="x86_64"
+            SAGERNET_ARCH_VARIANTS="linux-amd64"
             SAGERNET_ARCH="linux-amd64"
             ;;
         *)
             IMMORTAL_ARCH="$ARCH"
+            SAGERNET_ARCH_VARIANTS=""
             SAGERNET_ARCH=""
             ;;
     esac
@@ -350,7 +358,11 @@ install_singbox() {
     
     # Detect architecture first
     detect_package_arch
-    info "Architecture: ${ARCH} → ImmortalWRT: ${IMMORTAL_ARCH}, SagerNet: ${SAGERNET_ARCH}"
+    if [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
+        info "Architecture: ${ARCH} → ImmortalWRT: ${IMMORTAL_ARCH}, SagerNet variants: ${SAGERNET_ARCH_VARIANTS}"
+    else
+        info "Architecture: ${ARCH} → ImmortalWRT: ${IMMORTAL_ARCH}, SagerNet: ${SAGERNET_ARCH:-none}"
+    fi
     
     # Check if already installed with sufficient version
     if command -v sing-box >/dev/null 2>&1; then
@@ -380,41 +392,49 @@ install_singbox() {
     if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH" ]; then
         step "Installing pinned sing-box v${SINGBOX_PINNED_VERSION} from GitHub..."
         
-        BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_PINNED_VERSION}/sing-box-${SINGBOX_PINNED_VERSION}-${SAGERNET_ARCH}.tar.gz"
-        
         TMP_DIR="/tmp/singbox_install"
         mkdir -p "$TMP_DIR"
         
-        # Check if URL is accessible first
-        if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
-            if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
-                cd "$TMP_DIR"
-                if tar -xzf sing-box.tar.gz 2>/dev/null; then
-                    BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
-                    if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-                        # Remove old version if exists
-                        rm -f /usr/bin/sing-box 2>/dev/null
-                        chmod +x "$BINARY_PATH"
-                        mv "$BINARY_PATH" /usr/bin/sing-box
-                        cd /
-                        rm -rf "$TMP_DIR"
-                        info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version)"
-                        return 0
+        # Try all architecture variants for MIPS
+        TRIED_ARCHS=""
+        for ARCH_VARIANT in $SAGERNET_ARCH_VARIANTS; do
+            BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_PINNED_VERSION}/sing-box-${SINGBOX_PINNED_VERSION}-${ARCH_VARIANT}.tar.gz"
+            TRIED_ARCHS="$TRIED_ARCHS $ARCH_VARIANT"
+            
+            step "  Trying ${ARCH_VARIANT}..."
+            
+            # Check if URL is accessible first
+            if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
+                if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                    cd "$TMP_DIR"
+                    if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                        BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                        if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                            # Remove old version if exists
+                            rm -f /usr/bin/sing-box 2>/dev/null
+                            chmod +x "$BINARY_PATH"
+                            mv "$BINARY_PATH" /usr/bin/sing-box
+                            cd /
+                            rm -rf "$TMP_DIR"
+                            info "sing-box ${SINGBOX_PINNED_VERSION} installed (pinned version, ${ARCH_VARIANT})"
+                            return 0
+                        else
+                            warn "    Binary not found in archive"
+                        fi
                     else
-                        warn "Binary not found in archive"
+                        warn "    Failed to extract archive"
                     fi
+                    cd /
+                    rm -rf "$TMP_DIR"
                 else
-                    warn "Failed to extract archive"
+                    warn "    Failed to download"
                 fi
-                cd /
-                rm -rf "$TMP_DIR"
             else
-                warn "Failed to download from GitHub (URL may not exist for this architecture)"
+                [ "$DEBUG" = "1" ] && warn "    URL not accessible" || true
             fi
-        else
-            warn "GitHub release URL not accessible (v${SINGBOX_PINNED_VERSION} may not have ${SAGERNET_ARCH} build)"
-        fi
-        warn "Failed to download pinned version, trying alternatives..."
+        done
+        
+        warn "Failed to download pinned version (tried:$TRIED_ARCHS), trying alternatives..."
     fi
     
     # =============================================
@@ -496,55 +516,112 @@ install_singbox() {
     # =============================================
     # Method 5: SagerNet latest release (fallback)
     # =============================================
-    if [ -n "$SAGERNET_ARCH" ]; then
+    if [ -n "$SAGERNET_ARCH" ] && [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
         step "Trying SagerNet latest release..."
         
         LATEST_RELEASE=$(curl -fsSL --max-time 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
         
         if [ -n "$LATEST_RELEASE" ]; then
             VERSION_NUM=$(echo "$LATEST_RELEASE" | sed 's/^v//')
-            BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_RELEASE}/sing-box-${VERSION_NUM}-${SAGERNET_ARCH}.tar.gz"
             
             TMP_DIR="/tmp/singbox_install"
             mkdir -p "$TMP_DIR"
             
-            step "Downloading sing-box ${VERSION_NUM} from SagerNet..."
-            if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
-                if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
-                    cd "$TMP_DIR"
-                    if tar -xzf sing-box.tar.gz 2>/dev/null; then
-                        BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
-                        if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-                            rm -f /usr/bin/sing-box 2>/dev/null
-                            chmod +x "$BINARY_PATH"
-                            mv "$BINARY_PATH" /usr/bin/sing-box
-                            cd /
-                            rm -rf "$TMP_DIR"
-                            info "sing-box $VERSION_NUM installed from SagerNet"
-                            return 0
+            # Try all architecture variants
+            for ARCH_VARIANT in $SAGERNET_ARCH_VARIANTS; do
+                BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_RELEASE}/sing-box-${VERSION_NUM}-${ARCH_VARIANT}.tar.gz"
+                
+                step "  Trying latest (${VERSION_NUM}) with ${ARCH_VARIANT}..."
+                
+                if curl -fsSL --max-time 15 --head "$BINARY_URL" >/dev/null 2>&1; then
+                    if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                        cd "$TMP_DIR"
+                        if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                            BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                            if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                                rm -f /usr/bin/sing-box 2>/dev/null
+                                chmod +x "$BINARY_PATH"
+                                mv "$BINARY_PATH" /usr/bin/sing-box
+                                cd /
+                                rm -rf "$TMP_DIR"
+                                info "sing-box $VERSION_NUM installed from SagerNet (${ARCH_VARIANT})"
+                                return 0
+                            else
+                                warn "    Binary not found in archive"
+                            fi
                         else
-                            warn "Binary not found in latest release archive"
+                            warn "    Failed to extract archive"
                         fi
+                        cd /
+                        rm -rf "$TMP_DIR"
                     else
-                        warn "Failed to extract latest release archive"
+                        warn "    Failed to download"
                     fi
-                    cd /
-                    rm -rf "$TMP_DIR"
                 else
-                    warn "Failed to download latest release"
+                    [ "$DEBUG" = "1" ] && warn "    URL not accessible" || true
                 fi
-            else
-                warn "Latest release URL not accessible for ${SAGERNET_ARCH}"
-            fi
+            done
+            warn "Latest release not available for any MIPS variant"
         else
             warn "Could not fetch latest release info from GitHub"
         fi
     fi
     
+    # =============================================
+    # Method 6: Try older sing-box versions (for MIPS compatibility)
+    # =============================================
+    if [ -n "$SAGERNET_ARCH_VARIANTS" ] && [ "$ARCH" = "mips" ] || [ "$ARCH" = "mipsel" ]; then
+        step "Trying older sing-box versions (MIPS compatibility)..."
+        
+        # Try a few recent versions that might have MIPS builds
+        for OLD_VERSION in "1.10.0" "1.9.4" "1.9.0"; do
+            for ARCH_VARIANT in $SAGERNET_ARCH_VARIANTS; do
+                BINARY_URL="https://github.com/SagerNet/sing-box/releases/download/v${OLD_VERSION}/sing-box-${OLD_VERSION}-${ARCH_VARIANT}.tar.gz"
+                
+                if curl -fsSL --max-time 10 --head "$BINARY_URL" >/dev/null 2>&1; then
+                    step "  Found v${OLD_VERSION} with ${ARCH_VARIANT}, downloading..."
+                    TMP_DIR="/tmp/singbox_install"
+                    mkdir -p "$TMP_DIR"
+                    
+                    if download "$BINARY_URL" "$TMP_DIR/sing-box.tar.gz"; then
+                        cd "$TMP_DIR"
+                        if tar -xzf sing-box.tar.gz 2>/dev/null; then
+                            BINARY_PATH=$(find . -name "sing-box" -type f 2>/dev/null | head -1)
+                            if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+                                rm -f /usr/bin/sing-box 2>/dev/null
+                                chmod +x "$BINARY_PATH"
+                                mv "$BINARY_PATH" /usr/bin/sing-box
+                                cd /
+                                rm -rf "$TMP_DIR"
+                                
+                                # Verify version meets minimum
+                                INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                                if version_ge "$INSTALLED_VER" "$SINGBOX_MIN_VERSION"; then
+                                    info "sing-box ${INSTALLED_VER} installed (older version, ${ARCH_VARIANT})"
+                                    warn "Note: Using older version ${INSTALLED_VER} instead of pinned ${SINGBOX_PINNED_VERSION}"
+                                    return 0
+                                else
+                                    warn "Version ${INSTALLED_VER} is below minimum ${SINGBOX_MIN_VERSION}"
+                                    rm -f /usr/bin/sing-box
+                                fi
+                            fi
+                        fi
+                        cd /
+                        rm -rf "$TMP_DIR"
+                    fi
+                    break  # Found working version, stop trying others
+                fi
+            done
+        done
+    fi
+    
     # Final diagnostic info
     echo ""
     warn "Could not install sing-box automatically"
-    echo "  Architecture detected: ${ARCH} (${IMMORTAL_ARCH:-unknown} / ${SAGERNET_ARCH:-unknown})"
+    echo "  Architecture detected: ${ARCH} (${IMMORTAL_ARCH:-unknown})"
+    if [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
+        echo "  SagerNet variants tried: ${SAGERNET_ARCH_VARIANTS}"
+    fi
     echo "  OpenWRT version: ${OPENWRT_VERSION}"
     echo ""
     echo "  Troubleshooting:"
@@ -552,6 +629,7 @@ install_singbox() {
     echo "  2. Check if architecture is supported: uname -m"
     echo "  3. Try manual installation: https://sing-box.sagernet.org/installation/from-source/"
     echo "  4. For MIPS devices, try: opkg install sing-box (if repo available)"
+    echo "  5. Consider using HomeProxy (luci-app-homeproxy) which includes sing-box"
     return 1
 }
 
