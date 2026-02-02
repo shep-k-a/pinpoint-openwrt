@@ -1900,12 +1900,14 @@ SBINIT
     chmod +x /etc/init.d/sing-box
     /etc/init.d/sing-box enable 2>/dev/null || true
     
-    # Restart rpcd
+    # Restart rpcd to apply changes
     step "Restarting rpcd..."
     /etc/init.d/rpcd restart >/dev/null 2>&1
     
-    # Clear LuCI cache
+    # Clear LuCI cache to force menu reload
+    step "Clearing LuCI cache..."
     rm -rf /tmp/luci-* 2>/dev/null || true
+    rm -rf /tmp/ucode-* 2>/dev/null || true
     
     # Verify installation
     sleep 2
@@ -1914,6 +1916,17 @@ SBINIT
         info "luci.pinpoint registered successfully!"
     else
         warn "luci.pinpoint not found in ubus. Check: logread | grep rpcd"
+    fi
+    
+    # Verify UCI config exists
+    if [ -f /etc/config/pinpoint ]; then
+        info "UCI config created successfully"
+    else
+        warn "UCI config not found, creating now..."
+        touch /etc/config/pinpoint
+        uci set pinpoint.@pinpoint[0]=pinpoint 2>/dev/null || uci add pinpoint pinpoint 2>/dev/null || true
+        uci set pinpoint.@pinpoint[0].enabled='1' 2>/dev/null || true
+        uci commit pinpoint 2>/dev/null || true
     fi
     
     info "LuCI App installed"
