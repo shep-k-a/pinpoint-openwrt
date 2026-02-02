@@ -1636,7 +1636,9 @@ function apply_groups_to_config() {
 	}
 	
 	config.outbounds = newOutbounds;
-	write_json('/etc/sing-box/config.json', config);
+	// Clean config before saving
+	let clean_config = clean_config_outbounds(config);
+	write_json('/etc/sing-box/config.json', clean_config);
 }
 
 // ===== SERVICE ROUTES =====
