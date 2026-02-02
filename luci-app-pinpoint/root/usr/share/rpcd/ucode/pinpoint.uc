@@ -914,7 +914,14 @@ function update_subscriptions() {
 			let nodes_count = 0;
 			if (match(content, /^[a-z]+:\/\//i)) {
 				// Plain links (one per line)
-				links = split(content, '\n');
+				let content_lines = split(content, '\n');
+				links = [];
+				for (let idx = 0; idx < length(content_lines); idx++) {
+					let line = trim(content_lines[idx]);
+					if (line) {
+						push(links, line);
+					}
+				}
 			} else if (match(content, /^\{/)) {
 				// sing-box JSON format - extract outbounds directly
 				try {
@@ -956,8 +963,8 @@ function update_subscriptions() {
 			}
 			
 			// Parse VPN links
-			for (let link in links) {
-				link = trim(link);
+			for (let idx = 0; idx < length(links); idx++) {
+				let link = trim(links[idx]);
 				if (!link || !match(link, /^[a-z]+:\/\//i)) continue;
 				
 				let outbound = parse_fn(link);
@@ -969,7 +976,8 @@ function update_subscriptions() {
 					let counter = 1;
 					while (true) {
 						let duplicate = false;
-						for (let existing in config.outbounds) {
+						for (let j = 0; j < length(config.outbounds); j++) {
+							let existing = config.outbounds[j];
 							if (existing.tag == outbound.tag) {
 								duplicate = true;
 								break;
