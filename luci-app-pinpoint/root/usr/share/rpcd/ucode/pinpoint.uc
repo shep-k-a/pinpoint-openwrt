@@ -818,7 +818,25 @@ function add_subscription(params) {
 	
 	write_json(SUBSCRIPTIONS_FILE, subs);
 	
-	return { success: true, id: id };
+	// Automatically update the newly added subscription
+	let update_result = update_subscriptions();
+	
+	if (update_result && update_result.success) {
+		return { 
+			success: true, 
+			id: id,
+			updated: true,
+			nodes: update_result.total_updated || 0
+		};
+	} else {
+		// Subscription added but update failed
+		return { 
+			success: true, 
+			id: id,
+			updated: false,
+			update_error: update_result ? update_result.error : 'Unknown error'
+		};
+	}
 }
 
 // Update all subscriptions
