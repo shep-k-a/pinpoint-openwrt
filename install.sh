@@ -17,28 +17,6 @@
 set -e
 
 # ============================================
-# Auto-download for interactive mode when piped
-# ============================================
-SCRIPT_URL="https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh"
-
-# Check if running from pipe and no mode specified (and not already re-executed)
-if [ ! -t 0 ] && [ -z "$1" ] && [ -z "$PINPOINT_REEXEC" ]; then
-    # Running from pipe without arguments - download and re-execute for interactive mode
-    TEMP_SCRIPT="/tmp/pinpoint_install.sh"
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$SCRIPT_URL" -o "$TEMP_SCRIPT" 2>/dev/null
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$TEMP_SCRIPT" "$SCRIPT_URL" 2>/dev/null
-    else
-        echo "Error: curl or wget required"
-        exit 1
-    fi
-    chmod +x "$TEMP_SCRIPT"
-    export PINPOINT_REEXEC=1
-    exec sh "$TEMP_SCRIPT" "$@"
-fi
-
-# ============================================
 # Configuration
 # ============================================
 PINPOINT_VERSION="1.0.0"
@@ -891,15 +869,15 @@ setup_authentication() {
     # Username
     DEFAULT_USER="admin"
     printf "  Username [${GREEN}$DEFAULT_USER${NC}]: "
-    read INPUT_USER
+    read INPUT_USER </dev/tty
     USERNAME="${INPUT_USER:-$DEFAULT_USER}"
     
     # Password
     while true; do
         printf "  Password: "
-        stty -echo 2>/dev/null || true
-        read PASSWORD
-        stty echo 2>/dev/null || true
+        stty -echo </dev/tty 2>/dev/null || true
+        read PASSWORD </dev/tty
+        stty echo </dev/tty 2>/dev/null || true
         echo ""
         
         if [ -z "$PASSWORD" ]; then
@@ -913,9 +891,9 @@ setup_authentication() {
         fi
         
         printf "  Confirm password: "
-        stty -echo 2>/dev/null || true
-        read PASSWORD2
-        stty echo 2>/dev/null || true
+        stty -echo </dev/tty 2>/dev/null || true
+        read PASSWORD2 </dev/tty
+        stty echo </dev/tty 2>/dev/null || true
         echo ""
         
         if [ "$PASSWORD" != "$PASSWORD2" ]; then
@@ -1760,7 +1738,7 @@ select_install_mode() {
     
     while true; do
         printf "  Select mode [1/2]: "
-        read MODE_CHOICE
+        read MODE_CHOICE </dev/tty
         case "$MODE_CHOICE" in
             1|full|Full|FULL)
                 INSTALL_MODE="full"
