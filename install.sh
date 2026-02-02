@@ -389,7 +389,7 @@ install_singbox() {
     # =============================================
     # Method 1: SagerNet pinned version (PREFERRED)
     # =============================================
-    if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH" ]; then
+    if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
         step "Installing pinned sing-box v${SINGBOX_PINNED_VERSION} from GitHub..."
         
         TMP_DIR="/tmp/singbox_install"
@@ -516,7 +516,7 @@ install_singbox() {
     # =============================================
     # Method 5: SagerNet latest release (fallback)
     # =============================================
-    if [ -n "$SAGERNET_ARCH" ] && [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
+    if [ -n "$SAGERNET_ARCH_VARIANTS" ]; then
         step "Trying SagerNet latest release..."
         
         LATEST_RELEASE=$(curl -fsSL --max-time 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
