@@ -262,12 +262,14 @@ function clean_config_outbounds(config) {
 	if (cleaned.dns && cleaned.dns.servers) {
 		for (let server in cleaned.dns.servers) {
 			// If DNS server doesn't have detour, add direct-out to prevent loopback
-			if (!server.detour && server.address && !server.address.match(/^127\./)) {
-				server.detour = 'direct-out';
-			}
-			// For local DNS (127.0.0.1), ensure it uses direct-out
-			if (server.address && server.address.match(/^127\./)) {
-				server.detour = 'direct-out';
+			if (!server.detour && server.address) {
+				let server_addr = server.address;
+				if (!match(server_addr, /^127\./)) {
+					server.detour = 'direct-out';
+				} else {
+					// For local DNS (127.0.0.1), ensure it uses direct-out
+					server.detour = 'direct-out';
+				}
 			}
 		}
 	} else if (!cleaned.dns) {
@@ -437,8 +439,9 @@ function parse_vpn_link(link) {
 		if (m) {
 			let userinfo = b64decode(m[1]);
 			if (userinfo) {
-				let parts = split(trim(userinfo), ':');
-				if (length(parts) >= 2) {
+				userinfo = trim(userinfo);
+				let parts = split(userinfo, ':');
+				if (parts && length(parts) >= 2) {
 					outbound = {
 						type: 'shadowsocks',
 						tag: name || 'ss-' + m[2],
@@ -1602,8 +1605,9 @@ function get_logs(params) {
 	let output = run_cmd(cmd);
 	if (!output) output = '';
 	
+	let output_trimmed = trim(output);
 	return {
-		logs: split(trim(output), '\n'),
+		logs: split(output_trimmed, '\n'),
 		type: log_type
 	};
 }
