@@ -148,6 +148,53 @@ function clean_config_outbounds(config) {
 		}
 	}
 	
+	// Ensure direct-out and dns-out outbounds exist
+	let has_direct_out = false;
+	let has_dns_out = false;
+	
+	for (let ob in cleaned.outbounds) {
+		if (ob.tag == 'direct-out') {
+			has_direct_out = true;
+		}
+		if (ob.tag == 'dns-out') {
+			has_dns_out = true;
+		}
+	}
+	
+	// Add direct-out if missing (must be first)
+	if (!has_direct_out) {
+		let new_outbounds = [{ type: 'direct', tag: 'direct-out' }];
+		for (let ob in cleaned.outbounds) {
+			push(new_outbounds, ob);
+		}
+		cleaned.outbounds = new_outbounds;
+	} else {
+		// Ensure direct-out is first
+		let new_outbounds = [];
+		let direct_ob = null;
+		
+		// Find and add direct-out first
+		for (let ob in cleaned.outbounds) {
+			if (ob.tag == 'direct-out') {
+				direct_ob = ob;
+			} else {
+				push(new_outbounds, ob);
+			}
+		}
+		
+		if (direct_ob) {
+			cleaned.outbounds = [direct_ob];
+			for (let ob in new_outbounds) {
+				push(cleaned.outbounds, ob);
+			}
+		}
+	}
+	
+	// Add dns-out if missing
+	if (!has_dns_out) {
+		push(cleaned.outbounds, { type: 'dns', tag: 'dns-out' });
+	}
+	
 	// Ensure route section exists with DNS rule
 	if (!cleaned.route) {
 		cleaned.route = {
