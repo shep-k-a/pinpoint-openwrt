@@ -4,7 +4,7 @@
 
 set -e
 
-MARK=0x100
+MARK=0x1
 TABLE_ID=100
 TUN_IFACE="tun1"
 
@@ -79,16 +79,16 @@ table inet pinpoint {
         type filter hook prerouting priority mangle - 1; policy accept;
         
         # Mark packets destined to tunnel IPs
-        ip daddr @tunnel_ips meta mark set 0x100 counter
-        ip daddr @tunnel_nets meta mark set 0x100 counter
+        ip daddr @tunnel_ips meta mark set 0x1 counter
+        ip daddr @tunnel_nets meta mark set 0x1 counter
     }
     
     chain output {
         type route hook output priority mangle - 1; policy accept;
         
         # Also mark local traffic (from router itself)
-        ip daddr @tunnel_ips meta mark set 0x100 counter
-        ip daddr @tunnel_nets meta mark set 0x100 counter
+        ip daddr @tunnel_ips meta mark set 0x1 counter
+        ip daddr @tunnel_nets meta mark set 0x1 counter
     }
 }
 EOF

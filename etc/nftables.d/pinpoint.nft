@@ -26,8 +26,8 @@ table inet pinpoint {
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
         
         # Mark packets to tunnel IPs
-        ip daddr @tunnel_ips meta mark set 0x100 counter comment "pinpoint: dns-resolved"
-        ip daddr @tunnel_nets meta mark set 0x100 counter comment "pinpoint: static-lists"
+        ip daddr @tunnel_ips meta mark set 0x1 counter comment "pinpoint: dns-resolved"
+        ip daddr @tunnel_nets meta mark set 0x1 counter comment "pinpoint: static-lists"
     }
     
     # Mark outgoing packets from router itself
@@ -38,7 +38,7 @@ table inet pinpoint {
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
         
         # Mark packets to tunnel IPs
-        ip daddr @tunnel_ips meta mark set 0x100 counter comment "pinpoint: dns-resolved"
-        ip daddr @tunnel_nets meta mark set 0x100 counter comment "pinpoint: static-lists"
+        ip daddr @tunnel_ips meta mark set 0x1 counter comment "pinpoint: dns-resolved"
+        ip daddr @tunnel_nets meta mark set 0x1 counter comment "pinpoint: static-lists"
     }
 }

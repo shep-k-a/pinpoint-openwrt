@@ -1326,6 +1326,9 @@ MARK=0x1
 TABLE_ID=100
 TUN_IFACE="tun1"
 
+# Note: MARK 0x1 is used for policy routing
+# nftables will mark packets with 0x1, and ip rule will route them via table 100
+
 log() { echo "[pinpoint] $1"; }
 
 case "${1:-start}" in
