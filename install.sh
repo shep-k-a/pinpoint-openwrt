@@ -1268,7 +1268,7 @@ setup_routing() {
     
     # Setup policy routing
     ip rule del fwmark 0x1 lookup 100 2>/dev/null
-    ip rule add fwmark 0x1 lookup 100 priority 100
+    ip rule add fwmark 0x1 lookup 100 priority 50
     ip route flush table 100 2>/dev/null
     ip route add default dev tun1 table 100
     
@@ -1463,7 +1463,7 @@ case "$INTERFACE" in
         
         # Ensure ip rule exists
         ip rule show 2>/dev/null | grep -q "fwmark 0x1 lookup 100" || {
-            ip rule add fwmark 0x1 lookup 100 priority 100 2>/dev/null
+            ip rule add fwmark 0x1 lookup 100 priority 50 2>/dev/null
             logger -t pinpoint "Added fwmark rule"
         }
         
@@ -2020,7 +2020,7 @@ setup_routing() {
     
     # Setup policy routing
     ip rule del fwmark 0x1 lookup 100 2>/dev/null
-    ip rule add fwmark 0x1 lookup 100 priority 100
+    ip rule add fwmark 0x1 lookup 100 priority 50
     ip route flush table 100 2>/dev/null
     ip route add default dev tun1 table 100
     
