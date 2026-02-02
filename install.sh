@@ -392,9 +392,38 @@ install_singbox() {
     # Method 1: OpenWRT official repository (PREFERRED - opkg)
     # =============================================
     step "Trying OpenWRT official repository (opkg)..."
+    
+    # If pinning enabled, try to install specific version first
+    if [ "$SINGBOX_PIN_ENABLED" = "1" ]; then
+        step "  Checking for pinned version ${SINGBOX_PINNED_VERSION}..."
+        # Check if pinned version is available
+        AVAILABLE_VERSIONS=$(opkg list sing-box 2>/dev/null | grep -oE "sing-box - [0-9]+\.[0-9]+\.[0-9]+" | awk '{print $3}')
+        if echo "$AVAILABLE_VERSIONS" | grep -q "^${SINGBOX_PINNED_VERSION}$"; then
+            step "  Installing pinned version ${SINGBOX_PINNED_VERSION}..."
+            opkg_silent install "sing-box=${SINGBOX_PINNED_VERSION}"
+            if command -v sing-box >/dev/null 2>&1; then
+                INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                if [ "$INSTALLED_VER" = "$SINGBOX_PINNED_VERSION" ]; then
+                    info "sing-box ${INSTALLED_VER} installed from OpenWRT repo (pinned version)"
+                    return 0
+                fi
+            fi
+        else
+            info "  Pinned version ${SINGBOX_PINNED_VERSION} not available in OpenWRT repo"
+            if [ -n "$AVAILABLE_VERSIONS" ]; then
+                info "  Available versions: $(echo "$AVAILABLE_VERSIONS" | tr '\n' ' ')"
+            fi
+        fi
+    fi
+    
+    # Try any available version
+    step "  Installing any available version..."
     opkg_silent install sing-box
     if command -v sing-box >/dev/null 2>&1; then
         INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ "$INSTALLED_VER" != "$SINGBOX_PINNED_VERSION" ]; then
+            warn "Installed version ${INSTALLED_VER} differs from pinned ${SINGBOX_PINNED_VERSION}"
+        fi
         info "sing-box ${INSTALLED_VER:-unknown} installed from OpenWRT repo"
         return 0
     fi
@@ -404,9 +433,39 @@ install_singbox() {
     # =============================================
     if [ "$IMMORTALWRT_REPO_ADDED" = "1" ] || setup_immortalwrt_repo; then
         step "Installing sing-box from ImmortalWRT via opkg..."
+        
+        # If pinning enabled, try to install specific version first
+        if [ "$SINGBOX_PIN_ENABLED" = "1" ]; then
+            step "  Checking for pinned version ${SINGBOX_PINNED_VERSION}..."
+            # Update package lists first
+            opkg_silent update
+            AVAILABLE_VERSIONS=$(opkg list sing-box 2>/dev/null | grep -oE "sing-box - [0-9]+\.[0-9]+\.[0-9]+" | awk '{print $3}')
+            if echo "$AVAILABLE_VERSIONS" | grep -q "^${SINGBOX_PINNED_VERSION}$"; then
+                step "  Installing pinned version ${SINGBOX_PINNED_VERSION}..."
+                opkg_silent install "sing-box=${SINGBOX_PINNED_VERSION}"
+                if command -v sing-box >/dev/null 2>&1; then
+                    INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                    if [ "$INSTALLED_VER" = "$SINGBOX_PINNED_VERSION" ]; then
+                        info "sing-box ${INSTALLED_VER} installed from ImmortalWRT (pinned version)"
+                        return 0
+                    fi
+                fi
+            else
+                info "  Pinned version ${SINGBOX_PINNED_VERSION} not available in ImmortalWRT repo"
+                if [ -n "$AVAILABLE_VERSIONS" ]; then
+                    info "  Available versions: $(echo "$AVAILABLE_VERSIONS" | tr '\n' ' ')"
+                fi
+            fi
+        fi
+        
+        # Try any available version
+        step "  Installing any available version..."
         opkg_silent install sing-box
         if command -v sing-box >/dev/null 2>&1; then
             INSTALLED_VER=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            if [ "$SINGBOX_PIN_ENABLED" = "1" ] && [ "$INSTALLED_VER" != "$SINGBOX_PINNED_VERSION" ]; then
+                warn "Installed version ${INSTALLED_VER} differs from pinned ${SINGBOX_PINNED_VERSION}"
+            fi
             info "sing-box ${INSTALLED_VER:-unknown} installed from ImmortalWRT"
             return 0
         fi
