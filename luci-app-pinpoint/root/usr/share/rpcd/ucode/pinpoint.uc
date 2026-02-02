@@ -455,8 +455,30 @@ function apply() {
 
 // Restart sing-box
 function restart() {
-	run_cmd('/etc/init.d/sing-box restart 2>&1');
-	return { success: true };
+	// Validate config before restart
+	let config = read_json('/etc/sing-box/config.json');
+	if (!config) {
+		return { success: false, error: 'Cannot read sing-box config' };
+	}
+	
+	// Check if config has required fields
+	if (!config.outbounds || length(config.outbounds) == 0) {
+		return { success: false, error: 'No outbounds configured' };
+	}
+	
+	// Restart sing-box
+	let result = run_cmd('/etc/init.d/sing-box restart 2>&1');
+	
+	// Wait a bit and check if it started
+	run_cmd('sleep 2');
+	let ps_out = run_cmd('pgrep sing-box');
+	let started = (ps_out && trim(ps_out) != '');
+	
+	return { 
+		success: started,
+		output: result,
+		error: started ? null : 'sing-box failed to start'
+	};
 }
 
 // Get tunnel/VPN configurations
@@ -841,14 +863,30 @@ function set_active_tunnel(params) {
 	
 	// Find and move outbound to top (make it default)
 	let found = false;
+	let target_ob = null;
+	let new_outbounds = [];
+	
 	if (config.outbounds) {
-		for (let i = 0; i < length(config.outbounds); i++) {
-			if (config.outbounds[i].tag == tag) {
-				let ob = splice(config.outbounds, i, 1)[0];
-				unshift(config.outbounds, ob);
+		// First, find the target outbound
+		for (let ob in config.outbounds) {
+			if (ob.tag == tag) {
+				target_ob = ob;
 				found = true;
 				break;
 			}
+		}
+		
+		// If found, rebuild array with target at the beginning
+		if (found && target_ob) {
+			// Add target first
+			push(new_outbounds, target_ob);
+			// Add all others except target
+			for (let ob in config.outbounds) {
+				if (ob.tag != tag) {
+					push(new_outbounds, ob);
+				}
+			}
+			config.outbounds = new_outbounds;
 		}
 	}
 	
@@ -1581,7 +1619,14 @@ function set_service_route(params) {
 				data.routes[i].outbound = outbound;
 			} else {
 				// Remove route if outbound is empty (use default)
-				splice(data.routes, i, 1);
+				// Rebuild array without this route
+				let new_routes = [];
+				for (let j = 0; j < length(data.routes); j++) {
+					if (j != i) {
+						push(new_routes, data.routes[j]);
+					}
+				}
+				data.routes = new_routes;
 			}
 			found = true;
 			break;
