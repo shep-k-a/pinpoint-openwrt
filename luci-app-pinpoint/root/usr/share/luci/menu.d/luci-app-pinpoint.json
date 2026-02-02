@@ -1,5 +1,5 @@
 {
-	"admin/vpn/pinpoint": {
+	"admin/services/pinpoint": {
 		"title": "PinPoint",
 		"action": {
 			"type": "view",
@@ -10,7 +10,7 @@
 		},
 		"order": 60
 	},
-	"admin/vpn/pinpoint/status": {
+	"admin/services/pinpoint/status": {
 		"title": "Status",
 		"order": 10,
 		"action": {
@@ -18,7 +18,7 @@
 			"path": "pinpoint/status"
 		}
 	},
-	"admin/vpn/pinpoint/tunnels": {
+	"admin/services/pinpoint/tunnels": {
 		"title": "Tunnels",
 		"order": 15,
 		"action": {
@@ -26,7 +26,7 @@
 			"path": "pinpoint/tunnels"
 		}
 	},
-	"admin/vpn/pinpoint/services": {
+	"admin/services/pinpoint/services": {
 		"title": "Services",
 		"order": 20,
 		"action": {
@@ -34,7 +34,7 @@
 			"path": "pinpoint/services"
 		}
 	},
-	"admin/vpn/pinpoint/devices": {
+	"admin/services/pinpoint/devices": {
 		"title": "Devices",
 		"order": 30,
 		"action": {
@@ -42,7 +42,7 @@
 			"path": "pinpoint/devices"
 		}
 	},
-	"admin/vpn/pinpoint/custom": {
+	"admin/services/pinpoint/custom": {
 		"title": "Custom",
 		"order": 40,
 		"action": {
@@ -50,7 +50,7 @@
 			"path": "pinpoint/custom"
 		}
 	},
-	"admin/vpn/pinpoint/logs": {
+	"admin/services/pinpoint/logs": {
 		"title": "Logs & Tools",
 		"order": 50,
 		"action": {
@@ -58,7 +58,7 @@
 			"path": "pinpoint/logs"
 		}
 	},
-	"admin/vpn/pinpoint/settings": {
+	"admin/services/pinpoint/settings": {
 		"title": "Settings",
 		"order": 60,
 		"action": {
