@@ -1985,7 +1985,7 @@ install_luci_app() {
   "log": {"level": "info"},
   "dns": {
     "servers": [
-      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
       {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
     ]
   },
@@ -2017,7 +2017,7 @@ SBCFG
   "log": {"level": "info"},
   "dns": {
     "servers": [
-      {"tag": "google", "address": "8.8.8.8"},
+      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
       {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
     ]
   },
@@ -2101,23 +2101,8 @@ SBINIT
     chmod +x /etc/init.d/sing-box
     /etc/init.d/sing-box enable 2>/dev/null || true
     
-    # Initialize routing and services (Lite mode - no Python needed)
-    step "Initializing routing and services..."
-    
-    # Run pinpoint-init.sh to setup nftables and routing
-    if [ -f /opt/pinpoint/scripts/pinpoint-init.sh ]; then
-        chmod +x /opt/pinpoint/scripts/pinpoint-init.sh
-        /opt/pinpoint/scripts/pinpoint-init.sh start >/dev/null 2>&1 || true
-    fi
-    
-    # Run pinpoint-update.sh to update services (shell version, no Python needed)
-    if [ -f /opt/pinpoint/scripts/pinpoint-update.sh ]; then
-        chmod +x /opt/pinpoint/scripts/pinpoint-update.sh
-        /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 || true
-        info "Services and routing initialized"
-    else
-        warn "pinpoint-update.sh not found, services update skipped"
-    fi
+    # Note: pinpoint-init.sh will be created by create_routing_scripts() later
+    # We'll initialize routing after all scripts are created
     
     # Restart rpcd to apply changes
     step "Restarting rpcd..."
