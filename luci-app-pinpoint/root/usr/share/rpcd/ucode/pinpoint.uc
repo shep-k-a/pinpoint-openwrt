@@ -342,7 +342,8 @@ function parse_vpn_link(link) {
 			let query_match = match(link, /\?([^#]+)/);
 			if (query_match) {
 				let pairs = split(query_match[1], '&');
-				for (let pair in pairs) {
+				for (let i = 0; i < length(pairs); i++) {
+					let pair = pairs[i];
 					let kv = split(pair, '=');
 					if (length(kv) == 2) {
 						params[kv[0]] = kv[1];
@@ -919,7 +920,8 @@ function update_subscriptions() {
 				try {
 					let sb_config = json(content);
 					if (sb_config && sb_config.outbounds) {
-						for (let ob in sb_config.outbounds) {
+						for (let k = 0; k < length(sb_config.outbounds); k++) {
+							let ob = sb_config.outbounds[k];
 							if (ob.type && ob.type != 'direct' && ob.type != 'block' && ob.type != 'dns') {
 								ob._subscription = sub.id;
 								// Ensure unique tag
@@ -927,7 +929,8 @@ function update_subscriptions() {
 								let counter = 1;
 								while (true) {
 									let duplicate = false;
-									for (let existing in config.outbounds) {
+									for (let j = 0; j < length(config.outbounds); j++) {
+										let existing = config.outbounds[j];
 										if (existing.tag == ob.tag) {
 											duplicate = true;
 											break;
