@@ -106,7 +106,7 @@ table inet pinpoint {
     }
     
     chain forward {
-        type route hook forward priority mangle - 1; policy accept;
+        type filter hook forward priority mangle - 1; policy accept;
         
         # Skip local/private networks
         ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } return
