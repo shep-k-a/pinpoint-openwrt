@@ -911,9 +911,28 @@ def update_services_from_github():
     log(f"Updated {len(services_data['services'])} services from GitHub")
     return True
 
-def update_all():
+def update_all(update_github=False):
     """Main update function"""
     log("=== Starting list update ===")
+    
+    # Check if we should update from GitHub
+    # Update from GitHub if:
+    # 1. services.json doesn't exist
+    # 2. services.json is older than 24 hours (for auto-updates)
+    # 3. update_github flag is set
+    should_update_github = update_github
+    
+    if not should_update_github and SERVICES_FILE.exists():
+        import time
+        file_age = time.time() - SERVICES_FILE.stat().st_mtime
+        # Update from GitHub if file is older than 24 hours
+        if file_age > 86400:  # 24 hours
+            log("services.json is older than 24 hours, updating from GitHub...")
+            should_update_github = True
+    
+    if should_update_github or not SERVICES_FILE.exists():
+        log("Updating services from GitHub...")
+        update_services_from_github()
     
     if not SERVICES_FILE.exists():
         log(f"Services file not found: {SERVICES_FILE}")
@@ -997,14 +1016,9 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "update"
     
     if cmd == "update":
-        sys.exit(update_all())
+        sys.exit(update_all(update_github=False))
     elif cmd == "update-github":
-        success = update_services_from_github()
-        if success:
-            # After updating from GitHub, also update lists
-            sys.exit(update_all())
-        else:
-            sys.exit(1)
+        sys.exit(update_all(update_github=True))
     elif cmd in ("show", "status"):
         show_status()
     else:

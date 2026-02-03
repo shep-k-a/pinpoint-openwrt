@@ -1529,27 +1529,36 @@ HOTPLUGIFACE
 # Cron Jobs (periodic updates)
 # ============================================
 install_cron_jobs() {
-    step "Installing periodic update cron job..."
+    step "Installing periodic update cron jobs..."
     
     mkdir -p /etc/cron.d
     
-    # Create cron job for periodic list updates
+    # Create cron job for periodic list updates (every 6 hours)
+    # This will also auto-update from GitHub if services.json is older than 24 hours
     cat > /etc/cron.d/pinpoint << 'CRONEOF'
 # Pinpoint - Periodic list updates (every 6 hours)
+# Auto-updates from GitHub if services.json is older than 24 hours
 0 */6 * * * root /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1
+
+# Pinpoint - Force update from GitHub (once per day at 3 AM)
+# This ensures services.json is always fresh with latest services from GitHub
+0 3 * * * root /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-github >/dev/null 2>&1 || true
 CRONEOF
     
     # Also add to crontab if cron.d not supported
     if [ -f /etc/crontabs/root ]; then
         if ! grep -q "pinpoint-update" /etc/crontabs/root 2>/dev/null; then
             echo "0 */6 * * * /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1" >> /etc/crontabs/root
+            echo "0 3 * * * /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-github >/dev/null 2>&1 || true" >> /etc/crontabs/root
         fi
     fi
     
     # Restart cron if running
     /etc/init.d/cron restart 2>/dev/null || true
     
-    info "Cron job installed (updates every 6 hours)"
+    info "Cron jobs installed:"
+    info "  - List updates: every 6 hours (auto-updates from GitHub if needed)"
+    info "  - GitHub update: daily at 3 AM (force update services.json)"
 }
 
 # ============================================
