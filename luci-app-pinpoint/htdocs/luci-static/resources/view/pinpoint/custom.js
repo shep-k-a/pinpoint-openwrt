@@ -266,10 +266,36 @@ return view.extend({
 		
 		view.appendChild(formSection);
 		
+		// Hide "Apply Changes" button - changes are applied automatically
+		var self = this;
+		setTimeout(function() {
+			var applyBtn = document.querySelector('.cbi-page-actions .cbi-button-apply');
+			if (applyBtn) {
+				applyBtn.style.display = 'none';
+			}
+			// Also hide the entire actions section if empty
+			var actionsSection = document.querySelector('.cbi-page-actions');
+			if (actionsSection) {
+				var visibleButtons = actionsSection.querySelectorAll('button:not([style*="display: none"])');
+				if (visibleButtons.length === 0) {
+					actionsSection.style.display = 'none';
+				}
+			}
+		}, 100);
+		
 		return view;
 	},
 
-	handleSaveApply: null,
-	handleSave: null,
-	handleReset: null
+	handleSaveApply: function() {
+		// Do nothing - changes are applied automatically
+		return Promise.resolve();
+	},
+	handleSave: function() {
+		// Do nothing
+		return Promise.resolve();
+	},
+	handleReset: function() {
+		// Do nothing
+		return Promise.resolve();
+	}
 });
