@@ -150,18 +150,37 @@ process_source() {
     local source_type="$3"
     
     local temp_file="$TEMP_DIR/${service_id}_raw_$$"
+    local parsed_file="$TEMP_DIR/${service_id}_parsed_$$"
     local output_file="$LISTS_DIR/${service_id}.txt"
+    local domains_file="$LISTS_DIR/${service_id}_domains.txt"
     
     log "Downloading $service_id from $source_url..."
     
     if download_file "$source_url" "$temp_file"; then
-        local count=$(parse_list "$temp_file" "$output_file" "$source_type")
-        log "Downloaded $count entries for $service_id"
-        rm -f "$temp_file"
+        local count=$(parse_list "$temp_file" "$parsed_file" "$source_type")
+        
+        if [ "$count" -gt 0 ]; then
+            # Determine if this is IP/CIDR or domains based on source type and content
+            if [ "$source_type" = "domains" ] || grep -qE '^[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}$' "$parsed_file" 2>/dev/null; then
+                # This is domains - append to domains file
+                cat "$parsed_file" >> "$domains_file" 2>/dev/null || true
+                sort -u "$domains_file" -o "$domains_file" 2>/dev/null || true
+                log "Downloaded $count domains for $service_id"
+            else
+                # This is IP/CIDR - append to main file
+                cat "$parsed_file" >> "$output_file" 2>/dev/null || true
+                sort -u "$output_file" -o "$output_file" 2>/dev/null || true
+                log "Downloaded $count IPs/CIDRs for $service_id"
+            fi
+        else
+            log "Downloaded 0 entries for $service_id (parsing may have failed)"
+        fi
+        
+        rm -f "$temp_file" "$parsed_file"
         return 0
     else
         log "Failed to download $service_id"
-        rm -f "$temp_file"
+        rm -f "$temp_file" "$parsed_file"
         return 1
     fi
 }
@@ -373,6 +392,10 @@ update_all_services() {
             
             if [ "$source_count" -gt 0 ] 2>/dev/null; then
                 log "  Found $source_count source(s) for $service_id"
+                
+                # Clear output files before processing sources (to avoid duplicates on re-run)
+                > "$LISTS_DIR/${service_id}.txt" 2>/dev/null || true
+                # Keep domains file as it may have static domains from config
                 
                 # Process all sources (loop through all)
                 source_idx=0
