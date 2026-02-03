@@ -96,17 +96,21 @@ parse_list() {
     
     case "$format" in
         keenetic)
-            # Keenetic format: route add IP mask NETMASK 0.0.0.0
-            while IFS= read -r line; do
-                case "$line" in
-                    "route add"*)
+            # Keenetic format: route add IP mask NETMASK 0.0.0.0 (case-insensitive)
+            while IFS= read -r line || [ -n "$line" ]; do
+                # Case-insensitive check for "route add"
+                line_lower=$(echo "$line" | tr '[:upper:]' '[:lower:]')
+                case "$line_lower" in
+                    route\ add*)
                         ip=$(echo "$line" | awk '{print $3}')
                         mask=$(echo "$line" | awk '{print $5}')
-                        cidr=$(mask_to_cidr "$mask")
-                        [ -n "$ip" ] && echo "$ip/$cidr"
+                        if [ -n "$ip" ] && [ -n "$mask" ]; then
+                            cidr=$(mask_to_cidr "$mask")
+                            [ -n "$cidr" ] && echo "$ip/$cidr"
+                        fi
                         ;;
                 esac
-            done < "$input" | sort -u > "$temp_out"
+            done < "$input" | sort -u > "$temp_out" || true
             ;;
         ip|cidr)
             # Plain IP/CIDR list - just clean it up
@@ -162,11 +166,12 @@ process_source() {
 
 # Extract domains from service config and save to file
 extract_service_domains() {
-    local service_id="$1"
+    local service_idx="$1"
+    local service_id="$2"
     local output_file="$LISTS_DIR/${service_id}_domains.txt"
     
     if command -v jsonfilter >/dev/null 2>&1; then
-        jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].domains[*]" 2>/dev/null | \
+        jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].domains[*]" 2>/dev/null | \
             sort -u > "$output_file"
         
         local count=$(wc -l < "$output_file" | xargs)
@@ -176,11 +181,12 @@ extract_service_domains() {
 
 # Extract static IP ranges from service config
 extract_service_ips() {
-    local service_id="$1"
+    local service_idx="$1"
+    local service_id="$2"
     local output_file="$LISTS_DIR/${service_id}_static.txt"
     
     if command -v jsonfilter >/dev/null 2>&1; then
-        jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].ip_ranges[*]" 2>/dev/null | \
+        jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].ip_ranges[*]" 2>/dev/null | \
             sort -u > "$output_file" 2>/dev/null || true
         
         local count=$(wc -l < "$output_file" 2>/dev/null | xargs)
@@ -203,38 +209,58 @@ update_all_services() {
         return 0
     fi
     
-    # Process each service
-    for service_id in $(jsonfilter -i "$SERVICES_FILE" -e '@.services[*].id' 2>/dev/null); do
-        enabled=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].enabled" 2>/dev/null)
+    # Process each service (use index-based access to avoid jsonfilter filtering issues)
+    service_count=$(jsonfilter -i "$SERVICES_FILE" -e '@.services' 2>/dev/null | grep -c '"id"' || echo 0)
+    
+    service_idx=0
+    while [ "$service_idx" -lt "$service_count" ]; do
+        service_id=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].id" 2>/dev/null)
+        enabled=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].enabled" 2>/dev/null)
+        
+        if [ -z "$service_id" ]; then
+            service_idx=$((service_idx + 1))
+            continue
+        fi
         
         if [ "$enabled" = "true" ]; then
             log "Processing service: $service_id"
             
             # Extract domains to file
-            extract_service_domains "$service_id"
+            extract_service_domains "$service_idx" "$service_id"
             
             # Extract static IP ranges
-            extract_service_ips "$service_id"
+            extract_service_ips "$service_idx" "$service_id"
             
-            # Download external sources
-            source_count=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].sources" 2>/dev/null | grep -c 'url' || echo 0)
+            # Download external sources (process all sources)
+            source_count=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources" 2>/dev/null | grep -c 'url' || echo 0)
             
             if [ "$source_count" -gt 0 ]; then
-                # Get first source URL (simplified - would need loop for multiple)
-                source_url=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].sources[0].url" 2>/dev/null)
-                source_type=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[@.id='$service_id'].sources[0].type" 2>/dev/null)
-                
-                if [ -n "$source_url" ]; then
-                    if process_source "$service_id" "$source_url" "${source_type:-ip}"; then
+                # Process all sources (loop through all)
+                source_idx=0
+                while true; do
+                    source_url=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources[$source_idx].url" 2>/dev/null)
+                    source_type=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources[$source_idx].type" 2>/dev/null)
+                    
+                    if [ -z "$source_url" ]; then
+                        break  # No more sources
+                    fi
+                    
+                    log "  Processing source $((source_idx + 1)): $source_url (type: ${source_type:-auto})"
+                    
+                    if process_source "$service_id" "$source_url" "${source_type:-auto}"; then
                         success=$((success + 1))
                     else
                         failed=$((failed + 1))
                     fi
-                fi
+                    
+                    source_idx=$((source_idx + 1))
+                done
             fi
         else
             log "Skipping disabled service: $service_id"
         fi
+        
+        service_idx=$((service_idx + 1))
     done
     
     log "=== Update complete: $success succeeded, $failed failed ==="
