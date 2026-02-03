@@ -499,8 +499,9 @@ return view.extend({
 							ui.hideModal();
 						ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
 					}).catch(function(e) {
+						clearInterval(progressInterval);
 						ui.hideModal();
-						ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+						ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
 					});
 				})
 			}, 'Применить изменения')
