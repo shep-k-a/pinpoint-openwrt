@@ -19,7 +19,7 @@ var callSaveSettings = rpc.declare({
 
 var callUpdateLists = rpc.declare({
 	object: 'luci.pinpoint',
-	method: 'apply',
+	method: 'update_lists',
 	expect: { }
 });
 
@@ -145,15 +145,18 @@ return view.extend({
 								_('Automatically update IP lists'))
 						])
 					]),
-					E('div', { 'class': 'tr' }, [
-						E('div', { 'class': 'td left' }, _('Update Interval')),
+					E('div', { 'class': 'tr', 'id': 'update-time-row', 'style': 'display: none;' }, [
+						E('div', { 'class': 'td left' }, _('Update Time (Full mode only)')),
 						E('div', { 'class': 'td' }, [
-							E('select', { 'id': 'update-interval', 'class': 'cbi-input-select' }, [
-								E('option', { 'value': '3600', 'selected': settings.update_interval == 3600 }, _('Every hour')),
-								E('option', { 'value': '21600', 'selected': settings.update_interval == 21600 }, _('Every 6 hours')),
-								E('option', { 'value': '43200', 'selected': settings.update_interval == 43200 }, _('Every 12 hours')),
-								E('option', { 'value': '86400', 'selected': settings.update_interval == 86400 }, _('Every 24 hours'))
-							])
+							E('input', {
+								'type': 'time',
+								'id': 'update-time',
+								'class': 'cbi-input-text',
+								'value': settings.update_time || '03:00',
+								'style': 'width: 120px;'
+							}),
+							E('span', { 'style': 'margin-left: 10px; color: #666;' }, 
+								_('Daily update time (24-hour format)'))
 						])
 					])
 				])
@@ -202,12 +205,19 @@ return view.extend({
 						'class': 'btn cbi-button cbi-button-action',
 						'click': ui.createHandlerFn(self, function() {
 							ui.showModal(_('Updating...'), [
-								E('p', { 'class': 'spinning' }, _('Downloading IP lists...'))
+								E('p', { 'class': 'spinning' }, _('Downloading IP lists and updating services...'))
 							]);
 							
-							return callUpdateLists().then(function() {
+							return callUpdateLists().then(function(result) {
 								ui.hideModal();
-								ui.addNotification(null, E('p', _('Lists updated')), 'success');
+								if (result && result.success) {
+									ui.addNotification(null, E('p', _('Lists updated successfully')), 'success');
+								} else {
+									ui.addNotification(null, E('p', result && result.error ? result.error : _('Update failed')), 'danger');
+								}
+							}).catch(function(e) {
+								ui.hideModal();
+								ui.addNotification(null, E('p', _('Update error: ') + (e.message || e)), 'danger');
 							});
 						})
 					}, _('Update Lists Now')),
@@ -394,6 +404,21 @@ return view.extend({
 			])
 		]));
 		
+		// Check if Full mode (Python available) to show update time
+		callGetSystemInfo().then(function(sysinfo) {
+			var hasPython = sysinfo && sysinfo.singbox_version && sysinfo.singbox_version !== _('Not installed');
+			var updateTimeRow = document.getElementById('update-time-row');
+			if (updateTimeRow) {
+				updateTimeRow.style.display = hasPython ? 'table-row' : 'none';
+			}
+		}).catch(function() {
+			// If system_info fails, assume Lite mode
+			var updateTimeRow = document.getElementById('update-time-row');
+			if (updateTimeRow) {
+				updateTimeRow.style.display = 'none';
+			}
+		});
+		
 		// Save button
 		view.appendChild(E('div', { 'class': 'cbi-page-actions' }, [
 			E('button', {
@@ -405,6 +430,12 @@ return view.extend({
 						tunnel_interface: document.getElementById('tunnel-iface').value,
 						tunnel_mark: document.getElementById('tunnel-mark').value
 					};
+					
+					// Add update_time if field exists (Full mode)
+					var updateTimeEl = document.getElementById('update-time');
+					if (updateTimeEl && updateTimeEl.offsetParent !== null) {
+						newSettings.update_time = updateTimeEl.value || '03:00';
+					}
 					
 					return callSaveSettings(newSettings).then(function(result) {
 						if (result.success) {

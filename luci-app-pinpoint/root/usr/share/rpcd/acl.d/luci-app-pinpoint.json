@@ -27,7 +27,8 @@
 					"groups",
 					"service_routes",
 					"adblock_status",
-					"export_config"
+					"export_config",
+					"update_lists"
 				]
 			}
 		},
@@ -52,6 +53,7 @@
 					"delete_custom_service",
 					"toggle_custom_service",
 					"save_settings",
+					"update_lists",
 					"import_link",
 					"import_batch",
 					"delete_subscription",

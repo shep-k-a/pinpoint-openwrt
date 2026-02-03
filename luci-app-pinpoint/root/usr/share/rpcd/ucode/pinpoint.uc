@@ -1379,9 +1379,14 @@ function get_settings() {
 		settings = {
 			auto_update: true,
 			update_interval: 21600,
+			update_time: '03:00',  // Default: 3 AM
 			tunnel_interface: 'tun1',
 			tunnel_mark: '0x100'
 		};
+	}
+	// Ensure update_time exists (for backward compatibility)
+	if (!settings.update_time) {
+		settings.update_time = '03:00';
 	}
 	return settings;
 }
@@ -1394,12 +1399,74 @@ function save_settings(params) {
 	
 	if (settings.auto_update != null) current.auto_update = settings.auto_update;
 	if (settings.update_interval != null) current.update_interval = settings.update_interval;
+	if (settings.update_time != null) current.update_time = settings.update_time;
 	if (settings.tunnel_interface != null) current.tunnel_interface = settings.tunnel_interface;
 	if (settings.tunnel_mark != null) current.tunnel_mark = settings.tunnel_mark;
 	
 	write_json(SETTINGS_FILE, current);
 	
+	// Update cron if update_time changed (Full mode only)
+	if (settings.update_time != null && command -v python3 >/dev/null 2>&1) {
+		update_cron_schedule(current.update_time);
+	}
+	
 	return { success: true };
+}
+
+// Update cron schedule based on settings
+function update_cron_schedule(update_time) {
+	if (!update_time) return;
+	
+	// Parse time (HH:MM format) using shell
+	let time_check = run_cmd(sprintf('echo "%s" | grep -qE "^[0-9]{1,2}:[0-9]{2}$" && echo "valid" || echo "invalid"', update_time));
+	if (!time_check || !match(time_check, /valid/)) return;
+	
+	// Extract hour and minute using shell
+	let hour_str = run_cmd(sprintf('echo "%s" | cut -d: -f1', update_time));
+	let minute_str = run_cmd(sprintf('echo "%s" | cut -d: -f2', update_time));
+	
+	// Clean and convert to int
+	let hour = 3;
+	let minute = 0;
+	if (hour_str) {
+		let h_clean = match(hour_str, /(\d+)/);
+		if (h_clean && h_clean[1]) hour = int(h_clean[1]);
+	}
+	if (minute_str) {
+		let m_clean = match(minute_str, /(\d+)/);
+		if (m_clean && m_clean[1]) minute = int(m_clean[1]);
+	}
+	
+	// Validate
+	if (hour < 0 || hour > 23) hour = 3;
+	if (minute < 0 || minute > 59) minute = 0;
+	
+	// Update cron file using shell heredoc
+	let cron_cmd = sprintf('cat > /etc/cron.d/pinpoint << \'CRONEOF\'\n# Pinpoint - Daily list update at %s\n%d %d * * * root /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1\n# Pinpoint - Force update from GitHub (once per day at 3 AM)\n0 3 * * * root /usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-github >/dev/null 2>&1 || true\nCRONEOF\n', update_time, minute, hour);
+	run_cmd(cron_cmd);
+	
+	// Restart cron
+	run_cmd('/etc/init.d/cron restart >/dev/null 2>&1');
+}
+
+// Manual update lists (for Lite mode and manual updates)
+function update_lists() {
+	// Try Python first (Full mode), fallback to shell (Lite mode)
+	let python_result = run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update 2>&1');
+	
+	if (python_result !== null && python_result != '') {
+		// Python script executed (Full mode)
+		return { success: true, output: python_result };
+	}
+	
+	// Fallback to shell script (Lite mode)
+	let shell_result = run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update 2>&1');
+	
+	if (shell_result !== null && shell_result != '') {
+		return { success: true, output: shell_result };
+	}
+	
+	return { success: false, error: 'Update failed - both Python and shell scripts returned no output' };
 }
 
 // Get system info
@@ -2238,6 +2305,11 @@ const methods = {
 		args: { settings: {} },
 		call: function(req) {
 			return save_settings(req.args);
+		}
+	},
+	update_lists: {
+		call: function() {
+			return update_lists();
 		}
 	},
 	system_info: {

@@ -1539,51 +1539,61 @@ install_cron_jobs() {
         PYTHON_CMD="python3"
         command -v python3 >/dev/null 2>&1 || PYTHON_CMD="python"
         USE_PYTHON=1
-        UPDATE_CMD="$PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update"
-        GITHUB_CMD="$PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update-github"
-    else
-        USE_PYTHON=0
-        # In Lite mode, use shell script which updates from existing sources in services.json
-        # GitHub auto-update requires Python, so it's skipped in Lite mode
-        UPDATE_CMD="/opt/pinpoint/scripts/pinpoint-update.sh update"
-        GITHUB_CMD="true"  # Skip GitHub update in Lite mode (no-op)
-        info "Python not found, using shell script for updates (Lite mode)"
-        info "Note: GitHub auto-update requires Python (Full mode feature)"
-    fi
-    
-    # Create cron job for periodic list updates (every 6 hours)
-    cat > /etc/cron.d/pinpoint << CRONEOF
-# Pinpoint - Periodic list updates (every 6 hours)
-# Auto-updates from GitHub if services.json is older than 24 hours (Python mode only)
-0 */6 * * * root $UPDATE_CMD >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1
+        
+        # Get update time from settings (default: 03:00)
+        UPDATE_TIME="03:00"
+        if [ -f "$PINPOINT_DIR/data/settings.json" ]; then
+            UPDATE_TIME=$(grep -o '"update_time"[[:space:]]*:[[:space:]]*"[^"]*"' "$PINPOINT_DIR/data/settings.json" 2>/dev/null | cut -d'"' -f4 || echo "03:00")
+        fi
+        
+        # Parse time (HH:MM)
+        UPDATE_HOUR=$(echo "$UPDATE_TIME" | cut -d: -f1)
+        UPDATE_MINUTE=$(echo "$UPDATE_TIME" | cut -d: -f2)
+        [ -z "$UPDATE_HOUR" ] && UPDATE_HOUR=3
+        [ -z "$UPDATE_MINUTE" ] && UPDATE_MINUTE=0
+        
+        # Full mode: Daily update at specified time
+        cat > /etc/cron.d/pinpoint << CRONEOF
+# Pinpoint - Daily list update at $UPDATE_TIME (Full mode)
+# Auto-updates from GitHub if services.json is older than 24 hours
+$UPDATE_MINUTE $UPDATE_HOUR * * * root $PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1
 
 # Pinpoint - Force update from GitHub (once per day at 3 AM)
-# This ensures services.json is always fresh with latest services from GitHub (Python mode only)
-0 3 * * * root $GITHUB_CMD >/dev/null 2>&1 || true
+# This ensures services.json is always fresh with latest services from GitHub
+0 3 * * * root $PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update-github >/dev/null 2>&1 || true
 CRONEOF
-    
-    # Also add to crontab if cron.d not supported
-    if [ -f /etc/crontabs/root ]; then
-        if ! grep -q "pinpoint-update" /etc/crontabs/root 2>/dev/null; then
-            echo "0 */6 * * * $UPDATE_CMD >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1" >> /etc/crontabs/root
-            if [ "$USE_PYTHON" = "1" ]; then
-                echo "0 3 * * * $GITHUB_CMD >/dev/null 2>&1 || true" >> /etc/crontabs/root
+        
+        # Also add to crontab if cron.d not supported
+        if [ -f /etc/crontabs/root ]; then
+            if ! grep -q "pinpoint-update" /etc/crontabs/root 2>/dev/null; then
+                echo "$UPDATE_MINUTE $UPDATE_HOUR * * * $PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1" >> /etc/crontabs/root
+                echo "0 3 * * * $PYTHON_CMD /opt/pinpoint/scripts/pinpoint-update.py update-github >/dev/null 2>&1 || true" >> /etc/crontabs/root
             fi
         fi
+        
+        info "Cron jobs installed (Full mode with Python):"
+        info "  - List updates: daily at $UPDATE_TIME (auto-updates from GitHub if needed)"
+        info "  - GitHub update: daily at 3:00 AM (force update services.json)"
+        info "  - You can change update time in Settings page"
+    else
+        USE_PYTHON=0
+        # Lite mode: NO automatic cron updates, only manual updates via UI
+        # Remove any existing cron jobs
+        rm -f /etc/cron.d/pinpoint
+        
+        # Remove from crontabs if exists
+        if [ -f /etc/crontabs/root ]; then
+            sed -i '/pinpoint-update/d' /etc/crontabs/root 2>/dev/null || true
+        fi
+        
+        info "Cron jobs NOT installed (Lite mode):"
+        info "  - Automatic updates: disabled (use 'Update Lists Now' button in Settings)"
+        info "  - Manual updates: available via LuCI Settings page"
+        info "  - Note: Lists are updated once during installation"
     fi
     
     # Restart cron if running
     /etc/init.d/cron restart 2>/dev/null || true
-    
-    if [ "$USE_PYTHON" = "1" ]; then
-        info "Cron jobs installed (Full mode with Python):"
-        info "  - List updates: every 6 hours (auto-updates from GitHub if needed)"
-        info "  - GitHub update: daily at 3 AM (force update services.json)"
-    else
-        info "Cron jobs installed (Lite mode, shell script only):"
-        info "  - List updates: every 6 hours (from existing sources)"
-        info "  - GitHub update: skipped (requires Python)"
-    fi
 }
 
 # ============================================
