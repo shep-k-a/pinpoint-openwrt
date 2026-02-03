@@ -4,6 +4,50 @@
 'require ui';
 'require dom';
 
+// Create progress bar modal
+function createProgressModal(title, message) {
+	var progressContainer = E('div', { 'style': 'width: 100%; max-width: 400px;' }, [
+		E('p', { 'style': 'margin-bottom: 15px;' }, message || title),
+		E('div', {
+			'class': 'progress-bar-container',
+			'style': 'width: 100%; height: 20px; background-color: #e5e7eb; border-radius: 10px; overflow: hidden; position: relative;'
+		}, [
+			E('div', {
+				'class': 'progress-bar-fill',
+				'id': 'progress-fill',
+				'style': 'height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: 0%; transition: width 0.3s ease; border-radius: 10px;'
+			}),
+			E('div', {
+				'id': 'progress-text',
+				'style': 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 11px; font-weight: bold; color: #1f2937; white-space: nowrap;'
+			}, '0%')
+		]),
+		E('div', {
+			'id': 'progress-status',
+			'style': 'margin-top: 10px; font-size: 12px; color: #666; text-align: center; min-height: 16px;'
+		}, '')
+	]);
+	
+	return progressContainer;
+}
+
+// Update progress bar
+function updateProgress(percent, status) {
+	var fill = document.getElementById('progress-fill');
+	var text = document.getElementById('progress-text');
+	var statusEl = document.getElementById('progress-status');
+	
+	if (fill) {
+		fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+	}
+	if (text) {
+		text.textContent = Math.min(100, Math.max(0, Math.round(percent))) + '%';
+	}
+	if (statusEl && status) {
+		statusEl.textContent = status;
+	}
+}
+
 var callGetServices = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'services',
@@ -426,12 +470,33 @@ return view.extend({
 			E('button', {
 				'class': 'btn cbi-button cbi-button-apply',
 				'click': ui.createHandlerFn(this, function() {
-					ui.showModal('Применение...', [
-						E('p', { 'class': 'spinning' }, 'Обновление правил маршрутизации...')
-					]);
+					var progressModal = createProgressModal('Применение правил', 'Обновление правил маршрутизации...');
+					ui.showModal('Применение правил', progressModal);
+					
+					// Simulate progress
+					var progress = 0;
+					var progressInterval = setInterval(function() {
+						progress += Math.random() * 20;
+						if (progress > 85) progress = 85;
+						
+						var status = '';
+						if (progress < 40) {
+							status = 'Загрузка списков IP...';
+						} else if (progress < 70) {
+							status = 'Обновление правил nftables...';
+						} else {
+							status = 'Применение DNS конфигурации...';
+						}
+						
+						updateProgress(progress, status);
+					}, 200);
 					
 					return callApply().then(function() {
-						ui.hideModal();
+						clearInterval(progressInterval);
+						updateProgress(100, 'Готово!');
+						
+						setTimeout(function() {
+							ui.hideModal();
 						ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
 					}).catch(function(e) {
 						ui.hideModal();

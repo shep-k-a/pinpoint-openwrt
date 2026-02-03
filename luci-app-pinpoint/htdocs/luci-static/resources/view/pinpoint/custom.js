@@ -3,6 +3,50 @@
 'require rpc';
 'require ui';
 
+// Create progress bar modal
+function createProgressModal(title, message) {
+	var progressContainer = E('div', { 'style': 'width: 100%; max-width: 400px;' }, [
+		E('p', { 'style': 'margin-bottom: 15px;' }, message || title),
+		E('div', {
+			'class': 'progress-bar-container',
+			'style': 'width: 100%; height: 20px; background-color: #e5e7eb; border-radius: 10px; overflow: hidden; position: relative;'
+		}, [
+			E('div', {
+				'class': 'progress-bar-fill',
+				'id': 'progress-fill',
+				'style': 'height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: 0%; transition: width 0.3s ease; border-radius: 10px;'
+			}),
+			E('div', {
+				'id': 'progress-text',
+				'style': 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 11px; font-weight: bold; color: #1f2937; white-space: nowrap;'
+			}, '0%')
+		]),
+		E('div', {
+			'id': 'progress-status',
+			'style': 'margin-top: 10px; font-size: 12px; color: #666; text-align: center; min-height: 16px;'
+		}, '')
+	]);
+	
+	return progressContainer;
+}
+
+// Update progress bar
+function updateProgress(percent, status) {
+	var fill = document.getElementById('progress-fill');
+	var text = document.getElementById('progress-text');
+	var statusEl = document.getElementById('progress-status');
+	
+	if (fill) {
+		fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+	}
+	if (text) {
+		text.textContent = Math.min(100, Math.max(0, Math.round(percent))) + '%';
+	}
+	if (statusEl && status) {
+		statusEl.textContent = status;
+	}
+}
+
 var callGetCustomServices = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'custom_services',
@@ -40,15 +84,38 @@ var callApply = rpc.declare({
 
 // Helper: применить правила (без теста - тест некорректен на роутере)
 function applyAndTest(services, messagePrefix) {
-	ui.showModal(_('Applying...'), [
-		E('p', { 'class': 'spinning' }, _('Updating rules...'))
-	]);
+	var progressModal = createProgressModal(_('Applying Rules'), _('Updating routing rules...'));
+	ui.showModal(_('Applying Rules'), progressModal);
+	
+	// Simulate progress
+	var progress = 0;
+	var progressInterval = setInterval(function() {
+		progress += Math.random() * 20;
+		if (progress > 85) progress = 85;
+		
+		var status = '';
+		if (progress < 40) {
+			status = _('Loading IP lists...');
+		} else if (progress < 70) {
+			status = _('Updating nftables rules...');
+		} else {
+			status = _('Applying DNS configuration...');
+		}
+		
+		updateProgress(progress, status);
+	}, 200);
 
 	return callApply().then(function(result) {
-		ui.hideModal();
-		var msg = (messagePrefix || '') + _('Rules applied successfully');
-		ui.addNotification(null, E('p', msg), 'success');
+		clearInterval(progressInterval);
+		updateProgress(100, _('Complete!'));
+		
+		setTimeout(function() {
+			ui.hideModal();
+			var msg = (messagePrefix || '') + _('Rules applied successfully');
+			ui.addNotification(null, E('p', msg), 'success');
+		}, 500);
 	}).catch(function(e) {
+		clearInterval(progressInterval);
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to apply rules: ') + (e && e.message ? e.message : e)), 'danger');
 	});
