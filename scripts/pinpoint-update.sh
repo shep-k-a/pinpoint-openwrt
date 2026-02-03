@@ -1,7 +1,8 @@
 #!/bin/sh
 # Pinpoint - Download and update lists from external sources
 
-set -e
+# Don't exit on error - we handle errors manually
+set +e
 
 PINPOINT_DIR="/opt/pinpoint"
 DATA_DIR="$PINPOINT_DIR/data"
@@ -97,20 +98,21 @@ parse_list() {
     case "$format" in
         keenetic)
             # Keenetic format: route add IP mask NETMASK 0.0.0.0 (case-insensitive)
-            while IFS= read -r line || [ -n "$line" ]; do
-                # Case-insensitive check for "route add"
-                line_lower=$(echo "$line" | tr '[:upper:]' '[:lower:]')
-                case "$line_lower" in
-                    route\ add*)
-                        ip=$(echo "$line" | awk '{print $3}')
-                        mask=$(echo "$line" | awk '{print $5}')
-                        if [ -n "$ip" ] && [ -n "$mask" ]; then
-                            cidr=$(mask_to_cidr "$mask")
-                            [ -n "$cidr" ] && echo "$ip/$cidr"
-                        fi
-                        ;;
-                esac
-            done < "$input" | sort -u > "$temp_out" || true
+            # Also handles: route add IP mask NETMASK gateway
+            grep -i "^route add" "$input" 2>/dev/null | while IFS= read -r line || [ -n "$line" ]; do
+                # Extract IP (3rd field) and mask (5th field)
+                ip=$(echo "$line" | awk '{print $3}')
+                mask=$(echo "$line" | awk '{print $5}')
+                if [ -n "$ip" ] && [ -n "$mask" ]; then
+                    cidr=$(mask_to_cidr "$mask")
+                    if [ -n "$cidr" ]; then
+                        echo "$ip/$cidr"
+                    elif [ -n "$ip" ]; then
+                        # If mask conversion failed, use IP as /32
+                        echo "$ip/32"
+                    fi
+                fi
+            done | sort -u > "$temp_out" 2>/dev/null || true
             ;;
         ip|cidr)
             # Plain IP/CIDR list - just clean it up
@@ -194,6 +196,123 @@ extract_service_ips() {
     fi
 }
 
+# Get source URL and type by index (simplified)
+get_source_by_index() {
+    local service_id="$1"
+    local source_idx="$2"
+    local field="$3"  # "url" or "type"
+    
+    # Try jsonfilter first (most reliable)
+    if command -v jsonfilter >/dev/null 2>&1; then
+        local service_idx=0
+        while true; do
+            local sid=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].id" 2>/dev/null)
+            if [ -z "$sid" ]; then
+                break
+            fi
+            if [ "$sid" = "$service_id" ]; then
+                local result=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources[$source_idx].$field" 2>/dev/null)
+                if [ -n "$result" ]; then
+                    echo "$result"
+                    return 0
+                fi
+                return 1
+            fi
+            service_idx=$((service_idx + 1))
+        done
+    fi
+    
+    # Fallback: awk-based extraction
+    awk -v id="$service_id" -v idx="$source_idx" -v field="$field" '
+    BEGIN { in_service=0; in_sources=0; source_count=-1; in_obj=0; brace=0; found=0 }
+    /"id"[[:space:]]*:[[:space:]]*"/ {
+        if ($0 ~ "\"" id "\"") { in_service=1; next }
+        if (in_service && !in_sources) { in_service=0 }
+    }
+    in_service && /"sources"[[:space:]]*:[[:space:]]*\[/ { in_sources=1 }
+    in_sources {
+        if (/\{/) { 
+            source_count++
+            if (source_count == idx) { in_obj=1; brace=1 }
+        }
+        if (in_obj && /"[^"]*"[[:space:]]*:[[:space:]]*"/) {
+            # Extract key
+            key = $0
+            gsub(/^[[:space:]]*"/, "", key)
+            gsub(/"[[:space:]]*:.*$/, "", key)
+            # Check if this is our field
+            if (key == field) {
+                # Extract value
+                value = $0
+                gsub(/^[^:]*:[[:space:]]*"/, "", value)
+                gsub(/",?[[:space:]]*$/, "", value)
+                print value
+                found=1
+                exit
+            }
+        }
+        if (in_obj && /\}/) { 
+            brace--
+            if (brace == 0) { in_obj=0 }
+        }
+        if (/\]/ && in_sources && !in_obj) { exit }
+    }
+    in_service && !in_sources && /^[[:space:]]*\}/ { exit }
+    END { if (!found) exit 1 }
+    ' "$SERVICES_FILE" 2>/dev/null || return 1
+}
+
+# Count sources for a service (improved and simplified)
+count_sources() {
+    local service_id="$1"
+    local count=0
+    
+    # Try jsonfilter first (most reliable)
+    if command -v jsonfilter >/dev/null 2>&1; then
+        local service_idx=0
+        while true; do
+            local sid=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].id" 2>/dev/null)
+            if [ -z "$sid" ]; then
+                break
+            fi
+            if [ "$sid" = "$service_id" ]; then
+                # Try to get sources array and count URLs
+                local sources_json=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources" 2>/dev/null)
+                if [ -n "$sources_json" ]; then
+                    count=$(echo "$sources_json" | grep -o '"url"' | wc -l | xargs)
+                    [ -z "$count" ] && count=0
+                    echo "$count"
+                    return 0
+                fi
+                echo "0"
+                return 0
+            fi
+            service_idx=$((service_idx + 1))
+        done
+    fi
+    
+    # Fallback: simple grep/sed approach
+    # Extract service block and count "url" in sources array
+    awk -v id="$service_id" '
+    BEGIN { in_service=0; in_sources=0; count=0; bracket=0 }
+    /"id"[[:space:]]*:[[:space:]]*"/ {
+        if ($0 ~ "\"" id "\"") { in_service=1; next }
+        if (in_service && !in_sources) { in_service=0 }
+    }
+    in_service && /"sources"[[:space:]]*:[[:space:]]*\[/ { 
+        in_sources=1; bracket=1
+    }
+    in_sources {
+        if (/"url"/) count++
+        if (/\]/) { bracket--; if (bracket == 0) { print count; exit } }
+        if (/\{/) bracket++
+        if (/\}/) bracket--
+    }
+    in_service && !in_sources && /^[[:space:]]*\}/ { exit }
+    END { if (count == 0 && in_service) print "0" }
+    ' "$SERVICES_FILE" 2>/dev/null || echo "0"
+}
+
 # Update all enabled services
 update_all_services() {
     log "=== Starting list update ==="
@@ -227,25 +346,46 @@ update_all_services() {
             
             # Extract domains to file
             extract_service_domains "$service_idx" "$service_id"
+            log "  After extract_service_domains"
             
             # Extract static IP ranges
             extract_service_ips "$service_idx" "$service_id"
+            log "  After extract_service_ips"
             
             # Download external sources (process all sources)
-            source_count=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources" 2>/dev/null | grep -c 'url' || echo 0)
+            # Use improved source extraction that works even when jsonfilter has issues
+            source_count=$(count_sources "$service_id" 2>&1)
+            source_count=$(echo "$source_count" | tail -1 | xargs)  # Get last line and trim
             
-            if [ "$source_count" -gt 0 ]; then
+            # Debug output
+            log "  Checking sources for $service_id: raw_count='$source_count'"
+            
+            # Validate count
+            if [ -z "$source_count" ]; then
+                source_count=0
+            fi
+            
+            # Convert to number for comparison
+            if ! echo "$source_count" | grep -qE '^[0-9]+$'; then
+                log "  WARNING: Invalid source count '$source_count', treating as 0"
+                source_count=0
+            fi
+            
+            if [ "$source_count" -gt 0 ] 2>/dev/null; then
+                log "  Found $source_count source(s) for $service_id"
+                
                 # Process all sources (loop through all)
                 source_idx=0
-                while true; do
-                    source_url=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources[$source_idx].url" 2>/dev/null)
-                    source_type=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_idx].sources[$source_idx].type" 2>/dev/null)
+                while [ "$source_idx" -lt "$source_count" ]; do
+                    source_url=$(get_source_by_index "$service_id" "$source_idx" "url")
+                    source_type=$(get_source_by_index "$service_id" "$source_idx" "type")
                     
                     if [ -z "$source_url" ]; then
-                        break  # No more sources
+                        source_idx=$((source_idx + 1))
+                        continue
                     fi
                     
-                    log "  Processing source $((source_idx + 1)): $source_url (type: ${source_type:-auto})"
+                    log "  Processing source $((source_idx + 1))/$source_count: $source_url (type: ${source_type:-auto})"
                     
                     if process_source "$service_id" "$source_url" "${source_type:-auto}"; then
                         success=$((success + 1))
@@ -283,17 +423,21 @@ show_lists() {
     done
 }
 
-case "${1:-update}" in
-    update)
-        update_all_services
-        # Apply the new rules (через sh на случай проблем с исполняемым битом/CRLF)
-        sh /opt/pinpoint/scripts/pinpoint-apply.sh reload
-        ;;
-    show|list)
-        show_lists
-        ;;
-    *)
-        echo "Usage: $0 {update|show}"
-        exit 1
-        ;;
-esac
+# Only execute main logic if script is run directly (not sourced)
+# When sourced, $0 will be the parent shell, not the script name
+if [ "$(basename "$0" 2>/dev/null)" = "pinpoint-update.sh" ] || [ -n "${PINPOINT_UPDATE_DIRECT:-}" ]; then
+    case "${1:-update}" in
+        update)
+            update_all_services
+            # Apply the new rules (через sh на случай проблем с исполняемым битом/CRLF)
+            sh /opt/pinpoint/scripts/pinpoint-apply.sh reload
+            ;;
+        show|list)
+            show_lists
+            ;;
+        *)
+            echo "Usage: $0 {update|show}"
+            exit 1
+            ;;
+    esac
+fi
