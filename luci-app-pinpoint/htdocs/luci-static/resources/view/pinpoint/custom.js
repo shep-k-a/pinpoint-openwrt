@@ -6,6 +6,8 @@
 var callGetCustomServices = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'custom_services',
+	// Backend returns { services: [...] }
+	// but be tolerant to other shapes (plain array, nested objects, etc.)
 	expect: { }
 });
 
@@ -42,7 +44,17 @@ return view.extend({
 	},
 
 	render: function(data) {
-		var services = data.services || [];
+		// Нормализуем ответ:
+		//  - ожидаемый формат: { services: [...] }
+		//  - на всякий случай поддерживаем: [...] или { data: { services: [...] } }
+		var services = [];
+		if (Array.isArray(data)) {
+			services = data;
+		} else if (data && Array.isArray(data.services)) {
+			services = data.services;
+		} else if (data && data.data && Array.isArray(data.data.services)) {
+			services = data.data.services;
+		}
 		var self = this;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
@@ -198,12 +210,15 @@ return view.extend({
 							}
 							
 							return callAddCustomService(name, domains, ips).then(function(result) {
-								if (result.success) {
+								// Операция считаем успешной, если нет явного error
+								if (result && !result.error) {
 									ui.addNotification(null, E('p', _('Custom service added')), 'success');
 									window.location.reload();
 								} else {
-									ui.addNotification(null, E('p', result.error || _('Failed')), 'danger');
+									ui.addNotification(null, E('p', (result && result.error) || _('Failed')), 'danger');
 								}
+							}).catch(function(e) {
+								ui.addNotification(null, E('p', 'Ошибка: ' + (e && e.message ? e.message : e)), 'danger');
 							});
 						})
 					}, _('Add Custom Service'))
