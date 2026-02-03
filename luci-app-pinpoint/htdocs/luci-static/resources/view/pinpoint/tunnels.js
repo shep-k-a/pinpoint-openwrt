@@ -248,24 +248,34 @@ return view.extend({
 					'click': ui.createHandlerFn(self, function() {
 						var name = document.getElementById('sub-name').value;
 						var url = document.getElementById('sub-url').value;
-						
+
 						if (!url) {
 							ui.addNotification(null, E('p', 'Введите URL подписки'), 'warning');
 							return;
 						}
-						
+
 						ui.showModal('Добавление...', [
 							E('p', { 'class': 'spinning' }, 'Добавление подписки...')
 						]);
-						
+
 						return callAddSubscription(url, name).then(function(result) {
 							ui.hideModal();
-							if (result.success) {
-								ui.addNotification(null, E('p', 'Подписка добавлена'), 'success');
+
+							// Back-end всегда возвращает объект.
+							// Считаем операцию успешной, если нет явного поля error.
+							if (result && !result.error) {
+								var msg = 'Подписка добавлена';
+								if (result.message)
+									msg = result.message;
+
+								ui.addNotification(null, E('p', msg), 'success');
 								window.location.reload();
 							} else {
 								ui.addNotification(null, E('p', result.error || 'Ошибка добавления'), 'danger');
 							}
+						}).catch(function(e) {
+							ui.hideModal();
+							ui.addNotification(null, E('p', 'Ошибка: ' + (e && e.message ? e.message : e)), 'danger');
 						});
 					})
 				}, 'Добавить')
