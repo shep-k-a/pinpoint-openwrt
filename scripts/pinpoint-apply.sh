@@ -92,14 +92,40 @@ load_custom_service_ips() {
     
     log "Loading IPs from custom services..."
     
+    local count=0
     # For each enabled custom service, add its IPs to tunnel_nets
     for ip in $(jsonfilter -i "$CUSTOM_FILE" -e '@.services[@.enabled=true].ips[*]' 2>/dev/null); do
         case "$ip" in
             \#*|"") continue ;;
         esac
         ip_clean=$(echo "$ip" | tr -d '\r' | xargs)
-        [ -n "$ip_clean" ] && nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null || true
+        
+        if [ -z "$ip_clean" ]; then
+            continue
+        fi
+        
+        # Fix common IP format errors (e.g., 52.33.95.61/24 -> 52.33.95.0/24)
+        # If IP has /24 but last octet is not 0, fix it
+        if echo "$ip_clean" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/24$'; then
+            base_ip=$(echo "$ip_clean" | cut -d'/' -f1)
+            last_octet=$(echo "$base_ip" | cut -d'.' -f4)
+            if [ "$last_octet" != "0" ]; then
+                # Fix to proper /24 network
+                first_three=$(echo "$base_ip" | cut -d'.' -f1-3)
+                ip_clean="${first_three}.0/24"
+                log "Fixed IP format: $ip -> $ip_clean"
+            fi
+        fi
+        
+        # Add to tunnel_nets
+        if nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null; then
+            count=$((count + 1))
+        else
+            log "Warning: Failed to add IP $ip_clean to tunnel_nets"
+        fi
     done
+    
+    [ $count -gt 0 ] && log "Added $count IPs/ranges to tunnel_nets from custom services"
 }
 
 # Check if dnsmasq supports nftset
@@ -214,6 +240,9 @@ reload_all() {
     
     # Load service IP lists
     load_service_lists
+    
+    # Load IPs from custom services
+    load_custom_service_ips
     
     # Generate and apply dnsmasq config
     generate_dnsmasq_config
