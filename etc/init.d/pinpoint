@@ -1,5 +1,5 @@
 #!/bin/sh /etc/rc.common
-# Pinpoint - Selective routing service for OpenWrt
+# Pinpoint - Selective routing service for OpenWrt (Lite Mode)
 
 START=99
 STOP=10

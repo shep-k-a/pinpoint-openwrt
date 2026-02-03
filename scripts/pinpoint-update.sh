@@ -260,8 +260,8 @@ show_lists() {
 case "${1:-update}" in
     update)
         update_all_services
-        # Apply the new rules
-        /opt/pinpoint/scripts/pinpoint-apply.sh reload
+        # Apply the new rules (через sh на случай проблем с исполняемым битом/CRLF)
+        sh /opt/pinpoint/scripts/pinpoint-apply.sh reload
         ;;
     show|list)
         show_lists

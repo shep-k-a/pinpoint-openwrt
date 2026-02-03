@@ -248,16 +248,16 @@ return view.extend({
 					'click': ui.createHandlerFn(self, function() {
 						var name = document.getElementById('sub-name').value;
 						var url = document.getElementById('sub-url').value;
-
+						
 						if (!url) {
 							ui.addNotification(null, E('p', 'Введите URL подписки'), 'warning');
 							return;
 						}
-
+						
 						ui.showModal('Добавление...', [
 							E('p', { 'class': 'spinning' }, 'Добавление подписки...')
 						]);
-
+						
 						return callAddSubscription(url, name).then(function(result) {
 							ui.hideModal();
 

@@ -7,6 +7,7 @@ set -e
 PINPOINT_DIR="/opt/pinpoint"
 DATA_DIR="$PINPOINT_DIR/data"
 LISTS_DIR="$DATA_DIR/lists"
+CUSTOM_FILE="$DATA_DIR/custom_services.json"
 
 log() {
     logger -t pinpoint "$1"
@@ -78,6 +79,29 @@ load_service_lists() {
     fi
 }
 
+# Load IPs from enabled custom services directly into nft set
+load_custom_service_ips() {
+    if [ ! -f "$CUSTOM_FILE" ]; then
+        return 0
+    fi
+    
+    if ! command -v jsonfilter >/dev/null 2>&1; then
+        log "jsonfilter not found, skipping custom service IPs"
+        return 0
+    fi
+    
+    log "Loading IPs from custom services..."
+    
+    # For each enabled custom service, add its IPs to tunnel_nets
+    for ip in $(jsonfilter -i "$CUSTOM_FILE" -e '@.services[@.enabled=true].ips[*]' 2>/dev/null); do
+        case "$ip" in
+            \#*|"") continue ;;
+        esac
+        ip_clean=$(echo "$ip" | tr -d '\r' | xargs)
+        [ -n "$ip_clean" ] && nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null || true
+    done
+}
+
 # Check if dnsmasq supports nftset
 check_nftset_support() {
     dnsmasq --help 2>&1 | grep -q nftset
@@ -96,6 +120,9 @@ generate_dnsmasq_config() {
     fi
     
     log "Generating dnsmasq config..."
+    
+    # Ensure directory exists
+    mkdir -p "$(dirname "$output_file")"
     
     # Start fresh
     cat > "$output_file" << 'EOF'
@@ -126,9 +153,50 @@ EOF
                             \#*|"") continue ;;
                         esac
                         domain=$(echo "$domain" | tr -d '\r' | xargs)
-                        [ -n "$domain" ] && echo "nftset=/$domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                        if [ -n "$domain" ]; then
+                            # Add the base domain
+                            echo "nftset=/$domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                            # Add www. version if not already present
+                            case "$domain" in
+                                www.*) 
+                                    # If domain starts with www., also add without www.
+                                    base_domain="${domain#www.}"
+                                    [ -n "$base_domain" ] && echo "nftset=/$base_domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                                    ;;
+                                *)
+                                    # If domain doesn't start with www., also add www. version
+                                    echo "nftset=/www.$domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                                    ;;
+                            esac
+                        fi
                     done < "$domains_list"
                 fi
+            fi
+        done
+    fi
+    
+    # Add domains from enabled custom services
+    if [ -f "$CUSTOM_FILE" ] && command -v jsonfilter >/dev/null 2>&1; then
+        for domain in $(jsonfilter -i "$CUSTOM_FILE" -e '@.services[@.enabled=true].domains[*]' 2>/dev/null); do
+            case "$domain" in
+                \#*|"") continue ;;
+            esac
+            d_clean=$(echo "$domain" | tr -d '\r' | xargs)
+            if [ -n "$d_clean" ]; then
+                # Add the base domain
+                echo "nftset=/$d_clean/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                # Add www. version if not already present
+                case "$d_clean" in
+                    www.*) 
+                        # If domain starts with www., also add without www.
+                        base_domain="${d_clean#www.}"
+                        [ -n "$base_domain" ] && echo "nftset=/$base_domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                        ;;
+                    *)
+                        # If domain doesn't start with www., also add www. version
+                        echo "nftset=/www.$d_clean/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                        ;;
+                esac
             fi
         done
     fi

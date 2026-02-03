@@ -14,14 +14,15 @@ var callEnableDevice = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_device',
 	params: ['id', 'enabled'],
-	expect: { success: false }
+	// Не фиксируем жёстко структуру ответа, чтобы не ронять RPC при расширении backend
+	expect: { }
 });
 
 var callSetDeviceMode = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_device',
 	params: ['id', 'enabled', 'mode'],
-	expect: { success: false }
+	expect: { }
 });
 
 var callAddDevice = rpc.declare({
@@ -60,7 +61,7 @@ var callSetDeviceServices = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_device_services',
 	params: ['id', 'services'],
-	expect: { success: false }
+	expect: { }
 });
 
 var modeLabels = {
@@ -301,7 +302,10 @@ return view.extend({
 										// Mark as no longer network device
 										s.setAttribute('data-network', '');
 									} else {
-										savePromise = callSetDeviceMode(deviceId, null, newMode);
+										// Явно передаём текущий enabled, чтобы backend не получал null
+										var current = devices.find(function(d) { return d.id === deviceId; }) || {};
+										var enabled = (current.enabled !== false);
+										savePromise = callSetDeviceMode(deviceId, enabled, newMode);
 									}
 									
 									// If custom mode selected, show services modal

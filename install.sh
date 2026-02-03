@@ -762,9 +762,9 @@ install_dependencies() {
         fi
     fi
     
-    # Configure dnsmasq confdir
-    uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
-    mkdir -p /tmp/dnsmasq.d
+    # Configure dnsmasq confdir (used for nftset-based routing)
+    uci set dhcp.@dnsmasq[0].confdir='/etc/dnsmasq.d' 2>/dev/null || true
+    mkdir -p /etc/dnsmasq.d
     
     # Install https-dns-proxy to bypass ISP DNS hijacking (DPI)
     step "Installing https-dns-proxy (DNS over HTTPS)..."
@@ -1204,7 +1204,48 @@ create_init_script() {
     
     step "Creating PinPoint init.d service..."
     
-    cat > /etc/init.d/pinpoint << 'INITEOF'
+    if [ "$INSTALL_MODE" = "lite" ]; then
+        # Lite mode: just routing, no Python backend
+        cat > /etc/init.d/pinpoint << 'INITEOF'
+#!/bin/sh /etc/rc.common
+# Pinpoint - Selective routing service for OpenWrt (Lite Mode)
+
+START=99
+STOP=10
+USE_PROCD=1
+
+PINPOINT_DIR="/opt/pinpoint"
+
+start_service() {
+    logger -t pinpoint "Starting pinpoint service..."
+    
+    # Initialize nftables and policy routing
+    /opt/pinpoint/scripts/pinpoint-init.sh start
+    
+    # Apply current rules
+    /opt/pinpoint/scripts/pinpoint-apply.sh reload
+    
+    logger -t pinpoint "Pinpoint service started"
+}
+
+stop_service() {
+    logger -t pinpoint "Stopping pinpoint service..."
+    /opt/pinpoint/scripts/pinpoint-init.sh stop
+    logger -t pinpoint "Pinpoint service stopped"
+}
+
+reload_service() {
+    logger -t pinpoint "Reloading pinpoint rules..."
+    /opt/pinpoint/scripts/pinpoint-apply.sh reload
+}
+
+status_service() {
+    /opt/pinpoint/scripts/pinpoint-init.sh status
+}
+INITEOF
+    else
+        # Full mode: Python backend
+        cat > /etc/init.d/pinpoint << 'INITEOF'
 #!/bin/sh /etc/rc.common
 
 START=99
@@ -1232,6 +1273,7 @@ restart() {
     start
 }
 INITEOF
+    fi
 
     chmod +x /etc/init.d/pinpoint
     
@@ -1851,9 +1893,9 @@ install_luci_app() {
         fi
     fi
     
-    # Configure dnsmasq confdir
-    uci set dhcp.@dnsmasq[0].confdir='/tmp/dnsmasq.d' 2>/dev/null || true
-    mkdir -p /tmp/dnsmasq.d
+    # Configure dnsmasq confdir (used for nftset-based routing)
+    uci set dhcp.@dnsmasq[0].confdir='/etc/dnsmasq.d' 2>/dev/null || true
+    mkdir -p /etc/dnsmasq.d
     
     # Install https-dns-proxy to bypass ISP DNS hijacking (DPI)
     step "Installing https-dns-proxy (DNS over HTTPS)..."
@@ -1926,10 +1968,16 @@ install_luci_app() {
         "/usr/share/rpcd/acl.d/luci-app-pinpoint.json" || error "Failed to download ACL"
     info "Menu and ACL downloaded"
     
-    step "Downloading update script (shell version for Lite mode)..."
-    download "$GITHUB_REPO/luci-app-pinpoint/root/opt/pinpoint/scripts/pinpoint-update.sh" \
+    step "Downloading routing & update scripts (Lite mode)..."
+    download "$GITHUB_REPO/scripts/pinpoint-init.sh" \
+        "/opt/pinpoint/scripts/pinpoint-init.sh" || warn "Failed to download pinpoint-init.sh"
+    download "$GITHUB_REPO/scripts/pinpoint-apply.sh" \
+        "/opt/pinpoint/scripts/pinpoint-apply.sh" || warn "Failed to download pinpoint-apply.sh"
+    download "$GITHUB_REPO/scripts/pinpoint-update.sh" \
         "/opt/pinpoint/scripts/pinpoint-update.sh" || error "Failed to download pinpoint-update.sh"
     chmod +x /opt/pinpoint/scripts/*.sh 2>/dev/null || true
+    # Normalize line endings just in case
+    sed -i 's/\r$//' /opt/pinpoint/scripts/*.sh 2>/dev/null || true
     info "Scripts downloaded"
     
     step "Downloading services database..."
@@ -2296,6 +2344,7 @@ main() {
     if [ "$INSTALL_MODE" = "lite" ]; then
         # Lite installation
         install_luci_app
+        create_init_script
         create_routing_scripts
         install_hotplug_scripts
         install_cron_jobs

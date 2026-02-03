@@ -38,22 +38,45 @@ var callApply = rpc.declare({
 	expect: { }
 });
 
+// Helper: применить правила (без теста - тест некорректен на роутере)
+function applyAndTest(services, messagePrefix) {
+	ui.showModal(_('Applying...'), [
+		E('p', { 'class': 'spinning' }, _('Updating rules...'))
+	]);
+
+	return callApply().then(function(result) {
+		ui.hideModal();
+		var msg = (messagePrefix || '') + _('Rules applied successfully');
+		ui.addNotification(null, E('p', msg), 'success');
+	}).catch(function(e) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to apply rules: ') + (e && e.message ? e.message : e)), 'danger');
+	});
+}
+
 return view.extend({
 	load: function() {
+		// Один RPC-запрос, возвращаем его как есть
 		return callGetCustomServices();
 	},
 
 	render: function(data) {
+		// Ответ нашего RPC (может быть объектом или сразу массивом)
+		var resp = data;
+
+		// На всякий случай лог в консоль, чтобы можно было посмотреть структуру
+		try { console.log('PinPoint custom_services response:', resp); } catch (e) {}
+
 		// Нормализуем ответ:
 		//  - ожидаемый формат: { services: [...] }
 		//  - на всякий случай поддерживаем: [...] или { data: { services: [...] } }
 		var services = [];
-		if (Array.isArray(data)) {
-			services = data;
-		} else if (data && Array.isArray(data.services)) {
-			services = data.services;
-		} else if (data && data.data && Array.isArray(data.data.services)) {
-			services = data.data.services;
+		if (Array.isArray(resp)) {
+			services = resp;
+		} else if (resp && Array.isArray(resp.services)) {
+			services = resp.services;
+		} else if (resp && resp.data && Array.isArray(resp.data.services)) {
+			services = resp.data.services;
 		}
 		var self = this;
 		
@@ -107,12 +130,17 @@ return view.extend({
 								
 								btn.disabled = true;
 								return callToggleCustomService(id, newState).then(function(result) {
-									btn.disabled = false;
-									if (result.success) {
-										btn.setAttribute('data-enabled', newState ? '1' : '0');
-										btn.textContent = newState ? _('ON') : _('OFF');
-										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+									// Обновим локальный список
+									if (result && result.success) {
+										services.forEach(function(s) {
+											if (s.id === id)
+												s.enabled = !!newState;
+										});
 									}
+									// Мгновенно применяем и тестируем
+									return applyAndTest(services, '');
+								}).finally(function() {
+									btn.disabled = false;
 								});
 							})
 						}, svc.enabled ? _('ON') : _('OFF'))
@@ -126,10 +154,14 @@ return view.extend({
 								if (!confirm(_('Delete this custom service?'))) return;
 								
 								return callDeleteCustomService(id).then(function(result) {
-									if (result.success) {
+									if (result && result.success) {
+										// Удаляем из локального списка
+										services = services.filter(function(s) { return s.id !== id; });
 										var row = document.querySelector('[data-id="' + id + '"]');
 										if (row) row.remove();
 									}
+									// Применяем и тестируем с обновлённым набором
+									return applyAndTest(services, '');
 								});
 							})
 						}, '✕')
@@ -210,10 +242,16 @@ return view.extend({
 							}
 							
 							return callAddCustomService(name, domains, ips).then(function(result) {
-								// Операция считаем успешной, если нет явного error
 								if (result && !result.error) {
-									ui.addNotification(null, E('p', _('Custom service added')), 'success');
-									window.location.reload();
+									// Добавляем в локальный список, чтобы сразу можно было тестировать
+									services.push({
+										id: result.id || ('custom_' + (new Date().getTime())),
+										name: name,
+										domains: domains,
+										ips: ips,
+										enabled: true
+									});
+									return applyAndTest(services, _('Custom service added. '));
 								} else {
 									ui.addNotification(null, E('p', (result && result.error) || _('Failed')), 'danger');
 								}
@@ -227,23 +265,6 @@ return view.extend({
 		]);
 		
 		view.appendChild(formSection);
-		
-		// Apply button
-		view.appendChild(E('div', { 'class': 'cbi-page-actions' }, [
-			E('button', {
-				'class': 'btn cbi-button cbi-button-apply',
-				'click': ui.createHandlerFn(self, function() {
-					ui.showModal(_('Applying...'), [
-						E('p', { 'class': 'spinning' }, _('Updating rules...'))
-					]);
-					
-					return callApply().then(function() {
-						ui.hideModal();
-						ui.addNotification(null, E('p', _('Rules applied')), 'success');
-					});
-				})
-			}, _('Apply Changes'))
-		]));
 		
 		return view;
 	},
