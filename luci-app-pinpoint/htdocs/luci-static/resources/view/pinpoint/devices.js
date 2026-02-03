@@ -258,8 +258,7 @@ return view.extend({
 				E('div', { 'class': 'tr table-titles' }, [
 					E('div', { 'class': 'th' }, 'Устройство'),
 					E('div', { 'class': 'th' }, 'IP-адрес'),
-					E('div', { 'class': 'th' }, 'Режим'),
-					E('div', { 'class': 'th', 'style': 'width:80px' }, 'Действия')
+					E('div', { 'class': 'th' }, 'Режим')
 				])
 			]);
 			
@@ -378,34 +377,6 @@ return view.extend({
 							
 							return container;
 						})()
-					]),
-					E('div', { 'class': 'td' }, [
-						E('button', {
-							'class': 'btn cbi-button cbi-button-remove',
-							'title': 'Удалить',
-							'data-device': device.id,
-							'click': ui.createHandlerFn(self, function(ev) {
-								if (isLoading) return;
-								
-								var deviceId = ev.target.getAttribute('data-device');
-								if (!confirm('Удалить это устройство?')) return;
-								
-								return withLoading('Удаление...', 
-									callDeleteDevice(deviceId)
-										.then(function(result) {
-											if (result.success) {
-												return callApply().then(function() {
-													var row = document.querySelector('[data-device-id="' + deviceId + '"]');
-													if (row) row.remove();
-													ui.addNotification(null, E('p', 'Устройство удалено'), 'success');
-												});
-											} else {
-												ui.addNotification(null, E('p', result.error || 'Ошибка удаления'), 'danger');
-											}
-										})
-								);
-							})
-						}, '✕')
 					])
 				]);
 				
