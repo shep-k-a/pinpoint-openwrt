@@ -12,6 +12,8 @@ import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
+from ipaddress import ip_address, ip_network, IPv4Address, IPv4Network
+from collections import defaultdict
 
 PINPOINT_DIR = Path("/opt/pinpoint")
 DATA_DIR = PINPOINT_DIR / "data"
@@ -70,17 +72,27 @@ def parse_keenetic_format(content):
     return sorted(cidrs)
 
 def parse_plain_ip(content):
-    """Parse plain IP/CIDR list"""
+    """Parse plain IP/CIDR list and normalize to CIDR"""
     cidrs = set()
-    ip_pattern = re.compile(r'^(\d+\.\d+\.\d+\.\d+)(/\d+)?$')
     for line in content.split('\n'):
         line = line.strip()
         if line and not line.startswith('#'):
-            match = ip_pattern.match(line)
-            if match:
-                ip = match.group(1)
-                prefix = match.group(2) or '/32'
-                cidrs.add(f"{ip}{prefix}")
+            # Try to normalize IP to CIDR
+            normalized = normalize_ip_to_cidr(line)
+            if normalized:
+                cidrs.add(normalized)
+            else:
+                # Try pattern matching as fallback
+                ip_pattern = re.compile(r'^(\d+\.\d+\.\d+\.\d+)(/\d+)?$')
+                match = ip_pattern.match(line)
+                if match:
+                    ip = match.group(1)
+                    prefix = match.group(2) or '/32'
+                    cidr = f"{ip}{prefix}"
+                    # Normalize again
+                    normalized = normalize_ip_to_cidr(cidr)
+                    if normalized:
+                        cidrs.add(normalized)
     return sorted(cidrs)
 
 def parse_domains_list(content):
@@ -95,6 +107,91 @@ def parse_domains_list(content):
             if '.' in line and not line.startswith('.'):
                 domains.add(line.lower())
     return sorted(domains)
+
+def normalize_ip_to_cidr(ip_str):
+    """Convert IP address or range to CIDR format"""
+    ip_str = ip_str.strip()
+    if not ip_str or ip_str.startswith('#'):
+        return None
+    
+    # Already in CIDR format
+    if '/' in ip_str:
+        try:
+            network = ip_network(ip_str, strict=False)
+            return str(network)
+        except:
+            return None
+    
+    # Single IP address
+    try:
+        ip = ip_address(ip_str)
+        if isinstance(ip, IPv4Address):
+            return f"{ip}/32"
+    except:
+        pass
+    
+    return None
+
+def merge_cidr_networks(cidrs):
+    """Merge overlapping CIDR networks and remove duplicates"""
+    if not cidrs:
+        return set()
+    
+    networks = set()
+    for cidr in cidrs:
+        try:
+            network = ip_network(cidr, strict=False)
+            networks.add(network)
+        except:
+            continue
+    
+    if not networks:
+        return set()
+    
+    # Sort by network address
+    sorted_networks = sorted(networks, key=lambda x: (x.network_address, x.prefixlen))
+    
+    # Merge overlapping networks
+    merged = []
+    for net in sorted_networks:
+        if not merged:
+            merged.append(net)
+        else:
+            last = merged[-1]
+            # Check if networks overlap or one contains the other
+            if last.supernet_of(net):
+                # Last network contains this one, skip
+                continue
+            elif net.supernet_of(last):
+                # This network contains last, replace
+                merged[-1] = net
+            elif last.overlaps(net):
+                # Networks overlap, try to merge
+                try:
+                    # Find common supernet
+                    supernet = last.supernet()
+                    if supernet.supernet_of(net):
+                        merged[-1] = supernet
+                    else:
+                        merged.append(net)
+                except:
+                    merged.append(net)
+            else:
+                merged.append(net)
+    
+    return {str(net) for net in merged}
+
+def get_github_directory_contents(path, base_url="https://api.github.com/repos/RockBlack-VPN/ip-address/contents"):
+    """Get list of files in GitHub directory using API"""
+    api_url = f"{base_url}/{path}"
+    try:
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'Pinpoint/1.0', 'Accept': 'application/vnd.github.v3+json'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return [item for item in data if item.get('type') == 'file']
+    except Exception as e:
+        log(f"GitHub API error for {path}: {e}")
+        return []
 
 def parse_content(content, format_type='auto'):
     """Auto-detect and parse content format"""
@@ -169,32 +266,101 @@ def process_service(service):
         if not url:
             continue
         
-        log(f"  Downloading: {url}")
-        content = download_file(url)
-        
-        if content:
-            if source_type == 'domains':
-                # Parse as domain list and add to domains
-                parsed_domains = parse_content(content, source_type)
-                extra_domains.update(parsed_domains)
-                log(f"  Parsed {len(parsed_domains)} domains from source")
-            else:
-                # Parse as IP/CIDR list
-                cidrs = parse_content(content, source_type)
-                all_cidrs.update(cidrs)
-                log(f"  Parsed {len(cidrs)} CIDRs")
+        # Check if this is a GitHub directory URL
+        if 'github.com' in url and '/tree/' in url:
+            # Extract path from GitHub URL
+            # e.g., https://github.com/RockBlack-VPN/ip-address/tree/main/Global/Youtube
+            # -> Global/Youtube
+            try:
+                parts = url.split('/tree/')
+                if len(parts) > 1:
+                    path_parts = parts[1].split('/')
+                    if len(path_parts) >= 2:
+                        github_path = '/'.join(path_parts[1:])  # Skip branch name
+                        log(f"  Processing GitHub directory: {github_path}")
+                        
+                        # Get all files in directory
+                        files = get_github_directory_contents(github_path)
+                        for file_info in files:
+                            file_url = file_info.get('download_url', '')
+                            file_name = file_info.get('name', '')
+                            
+                            if not file_url:
+                                continue
+                            
+                            log(f"    Downloading: {file_name}")
+                            content = download_file(file_url)
+                            
+                            if content:
+                                # Detect file type
+                                is_domain_file = any(kw in file_name.lower() for kw in ['domain', 'domains', 'host', 'hosts'])
+                                
+                                if is_domain_file or source_type == 'domains':
+                                    parsed_domains = parse_content(content, 'domains')
+                                    extra_domains.update(parsed_domains)
+                                    log(f"      Parsed {len(parsed_domains)} domains")
+                                else:
+                                    cidrs = parse_content(content, source_type)
+                                    # Normalize to CIDR
+                                    normalized_cidrs = set()
+                                    for cidr in cidrs:
+                                        normalized = normalize_ip_to_cidr(cidr)
+                                        if normalized:
+                                            normalized_cidrs.add(normalized)
+                                    all_cidrs.update(normalized_cidrs)
+                                    log(f"      Parsed {len(normalized_cidrs)} CIDRs")
+            except Exception as e:
+                log(f"  Error processing GitHub directory: {e}")
+                continue
+        else:
+            # Regular URL
+            log(f"  Downloading: {url}")
+            content = download_file(url)
+            
+            if content:
+                if source_type == 'domains':
+                    # Parse as domain list and add to domains
+                    parsed_domains = parse_content(content, source_type)
+                    extra_domains.update(parsed_domains)
+                    log(f"  Parsed {len(parsed_domains)} domains from source")
+                else:
+                    # Parse as IP/CIDR list
+                    cidrs = parse_content(content, source_type)
+                    # Normalize to CIDR
+                    normalized_cidrs = set()
+                    for cidr in cidrs:
+                        normalized = normalize_ip_to_cidr(cidr)
+                        if normalized:
+                            normalized_cidrs.add(normalized)
+                    all_cidrs.update(normalized_cidrs)
+                    log(f"  Parsed {len(normalized_cidrs)} CIDRs")
     
     # Add extra domains from sources to domains file
     if extra_domains:
         all_domains = all_domains | extra_domains
+    
+    # Remove duplicate domains (case-insensitive)
+    all_domains = sorted(set(domain.lower() for domain in all_domains))
+    
+    if all_domains:
         domains_file = LISTS_DIR / f"{service_id}_domains.txt"
         with open(domains_file, 'w') as f:
-            for domain in sorted(all_domains):
+            for domain in all_domains:
                 f.write(f"{domain}\n")
-        log(f"  Updated domains file with {len(extra_domains)} extra domains (total: {len(all_domains)})")
+        log(f"  Saved {len(all_domains)} unique domains")
     
-    # Add static IP ranges to CIDRs
-    all_cidrs.update(ip_ranges)
+    # Add static IP ranges to CIDRs and normalize them
+    for ip_range in ip_ranges:
+        normalized = normalize_ip_to_cidr(ip_range)
+        if normalized:
+            all_cidrs.add(normalized)
+    
+    # Merge overlapping CIDR networks
+    if all_cidrs:
+        log(f"  Merging {len(all_cidrs)} CIDRs...")
+        merged_cidrs = merge_cidr_networks(all_cidrs)
+        log(f"  After merging: {len(merged_cidrs)} unique CIDRs (removed {len(all_cidrs) - len(merged_cidrs)} duplicates/overlaps)")
+        all_cidrs = merged_cidrs
     
     # Save CIDRs to file
     if all_cidrs:
@@ -202,7 +368,7 @@ def process_service(service):
         with open(cidrs_file, 'w') as f:
             for cidr in sorted(all_cidrs):
                 f.write(f"{cidr}\n")
-        log(f"  Total: {len(all_cidrs)} CIDRs saved to {cidrs_file}")
+        log(f"  Total: {len(all_cidrs)} unique CIDRs saved to {cidrs_file}")
 
 def check_nftset_support():
     """Check if dnsmasq supports nftset directive"""
@@ -642,6 +808,109 @@ def generate_device_rules():
     
     log(f"Applied rules for {len(enabled_devices)} devices")
 
+def update_services_from_github():
+    """Update services.json from GitHub repository"""
+    log("=== Updating services from GitHub ===")
+    
+    # Get list of services from GitHub Global directory
+    services_path = "Global"
+    service_dirs = get_github_directory_contents(services_path)
+    
+    if not service_dirs:
+        log("No services found in GitHub repository")
+        return False
+    
+    # Load existing services to preserve settings
+    existing_services = {}
+    if SERVICES_FILE.exists():
+        with open(SERVICES_FILE) as f:
+            existing_data = json.load(f)
+            for svc in existing_data.get('services', []):
+                existing_services[svc['id']] = svc
+    
+    # Process each service directory
+    services_data = {"services": []}
+    
+    for service_dir in service_dirs:
+        if service_dir.get('type') != 'dir':
+            continue
+        
+        service_name = service_dir.get('name', '')
+        service_path = f"{services_path}/{service_name}"
+        
+        # Normalize service ID
+        service_id = service_name.lower().replace(' ', '_').replace('-', '_')
+        
+        log(f"Processing GitHub service: {service_name}")
+        
+        # Get all files in service directory
+        files = get_github_directory_contents(service_path)
+        if not files:
+            continue
+        
+        all_cidrs = set()
+        all_domains = set()
+        
+        # Process each file
+        for file_info in files:
+            file_url = file_info.get('download_url', '')
+            file_name = file_info.get('name', '')
+            
+            if not file_url:
+                continue
+            
+            content = download_file(file_url)
+            if not content:
+                continue
+            
+            # Detect file type
+            is_domain_file = any(kw in file_name.lower() for kw in ['domain', 'domains', 'host', 'hosts'])
+            
+            if is_domain_file:
+                domains = parse_domains_list(content)
+                all_domains.update(domains)
+            else:
+                cidrs = parse_content(content, 'auto')
+                for cidr in cidrs:
+                    normalized = normalize_ip_to_cidr(cidr)
+                    if normalized:
+                        all_cidrs.add(normalized)
+        
+        # Merge overlapping CIDRs
+        if all_cidrs:
+            merged_cidrs = merge_cidr_networks(all_cidrs)
+            all_cidrs = merged_cidrs
+        
+        # Remove duplicate domains
+        all_domains = sorted(set(domain.lower() for domain in all_domains))
+        
+        # Get or create service
+        if service_id in existing_services:
+            service = existing_services[service_id]
+            # Update IPs and domains, preserve other settings
+            service['ip_ranges'] = sorted(list(all_cidrs))
+            service['domains'] = all_domains
+        else:
+            service = {
+                "id": service_id,
+                "name": service_name,
+                "enabled": False,
+                "domains": all_domains,
+                "ip_ranges": sorted(list(all_cidrs)),
+                "sources": []
+            }
+        
+        services_data['services'].append(service)
+        log(f"  {service_name}: {len(all_cidrs)} CIDRs, {len(all_domains)} domains")
+    
+    # Save updated services.json
+    SERVICES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SERVICES_FILE, 'w') as f:
+        json.dump(services_data, f, indent=2)
+    
+    log(f"Updated {len(services_data['services'])} services from GitHub")
+    return True
+
 def update_all():
     """Main update function"""
     log("=== Starting list update ===")
@@ -729,8 +998,15 @@ if __name__ == "__main__":
     
     if cmd == "update":
         sys.exit(update_all())
+    elif cmd == "update-github":
+        success = update_services_from_github()
+        if success:
+            # After updating from GitHub, also update lists
+            sys.exit(update_all())
+        else:
+            sys.exit(1)
     elif cmd in ("show", "status"):
         show_status()
     else:
-        print(f"Usage: {sys.argv[0]} {{update|show}}")
+        print(f"Usage: {sys.argv[0]} {{update|update-github|show}}")
         sys.exit(1)
