@@ -1795,7 +1795,8 @@ start_service() {
         PYTHON_CMD="python3"
         command -v python3 >/dev/null 2>&1 || PYTHON_CMD="python"
         if command -v "$PYTHON_CMD" >/dev/null 2>&1; then
-            "$PYTHON_CMD" "$PINPOINT_DIR/scripts/pinpoint-update.py" update >/dev/null 2>&1 || true
+            step "Updating service lists (this may take a minute)..."
+            "$PYTHON_CMD" "$PINPOINT_DIR/scripts/pinpoint-update.py" update || true
             info "Services and routing initialized"
         else
             warn "Python not found, services update skipped (run manually: $PINPOINT_DIR/scripts/pinpoint-update.py update)"
@@ -2404,7 +2405,8 @@ main() {
         
         # Run pinpoint-update.sh to update services (shell version, no Python needed)
         if [ -f /opt/pinpoint/scripts/pinpoint-update.sh ]; then
-            /opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 || true
+            step "Updating service lists (this may take a minute)..."
+            /opt/pinpoint/scripts/pinpoint-update.sh update || true
             info "Services and routing initialized"
         else
             warn "pinpoint-update.sh not found, services update skipped"
