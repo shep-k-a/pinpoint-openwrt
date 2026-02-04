@@ -59,3 +59,4 @@ update_*.py
 simple_*.py
 final_*.py
 singbox_config_fixed.json
+check.py

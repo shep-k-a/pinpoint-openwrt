@@ -1406,7 +1406,8 @@ function save_settings(params) {
 	write_json(SETTINGS_FILE, current);
 	
 	// Update cron if update_time changed (Full mode only)
-	if (settings.update_time != null && command -v python3 >/dev/null 2>&1) {
+	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
+	if (settings.update_time != null && has_python == 'yes\n' || has_python == 'yes') {
 		update_cron_schedule(current.update_time);
 	}
 	
