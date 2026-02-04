@@ -1617,15 +1617,16 @@ CRONEOF
         info "  - Note: Lists are updated once during installation"
     fi
     
-    # Add sing-box daily restart to prevent memory leaks (both modes)
+    # Add sing-box auto-restart every 12 hours to prevent memory leaks (both modes)
     step "Installing sing-box auto-restart (prevents memory leaks)..."
     cat > /etc/cron.d/singbox-restart << 'CRONEOF'
-# Restart sing-box daily at 4 AM to prevent memory leaks
+# Restart sing-box every 12 hours to prevent memory leaks
 # This is critical for routers with limited RAM (< 512 MB)
 # Using init.d script ensures proper cleanup and routing restart
 0 4 * * * root /etc/init.d/sing-box restart >/dev/null 2>&1
+0 16 * * * root /etc/init.d/sing-box restart >/dev/null 2>&1
 CRONEOF
-    info "sing-box will auto-restart daily at 4:00 AM (prevents memory leaks)"
+    info "sing-box will auto-restart every 12 hours (4:00 AM and 4:00 PM) to prevent memory leaks"
     
     # Restart cron if running
     /etc/init.d/cron restart 2>/dev/null || true
