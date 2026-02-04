@@ -514,10 +514,19 @@ return view.extend({
 								var serviceId = sel.getAttribute('data-service-route');
 								var outbound = sel.value;
 								
+								sel.disabled = true;
+								
 								callSetServiceRoute(serviceId, outbound).then(function(result) {
 									if (result.success) {
-										ui.addNotification(null, E('p', 'Маршрут обновлён'), 'success');
+										// Auto-apply changes
+										return callApply().then(function() {
+											ui.addNotification(null, E('p', 'Маршрут обновлён и применён'), 'success');
+										});
 									}
+								}).catch(function(e) {
+									ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
+								}).finally(function() {
+									sel.disabled = false;
 								});
 							})
 						}, outboundOptions.map(function(opt) {
@@ -613,48 +622,25 @@ return view.extend({
 			view.appendChild(section);
 		});
 		
-		// Apply button
-		view.appendChild(E('div', { 'class': 'cbi-page-actions' }, [
-			E('button', {
-				'class': 'btn cbi-button cbi-button-apply',
-				'click': ui.createHandlerFn(this, function() {
-					var progressModal = createProgressModal('Применение правил', 'Обновление правил маршрутизации...');
-					ui.showModal('Применение правил', progressModal);
-					
-					// Simulate progress
-					var progress = 0;
-					var progressInterval = setInterval(function() {
-						progress += Math.random() * 20;
-						if (progress > 85) progress = 85;
-						
-						var status = '';
-						if (progress < 40) {
-							status = 'Загрузка списков IP...';
-						} else if (progress < 70) {
-							status = 'Обновление правил nftables...';
-						} else {
-							status = 'Применение DNS конфигурации...';
-						}
-						
-						updateProgress(progress, status);
-					}, 200);
-					
-					return callApply().then(function() {
-						clearInterval(progressInterval);
-						updateProgress(100, 'Готово!');
-						
-						setTimeout(function() {
-							ui.hideModal();
-							ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
-						}, 500);
-					}).catch(function(e) {
-						clearInterval(progressInterval);
-						ui.hideModal();
-						ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
-					});
-				})
-			}, 'Применить изменения')
-		]));
+		// Hide Apply button (auto-apply on changes)
+		var applyBtnContainer = E('div', { 
+			'class': 'cbi-page-actions',
+			'style': 'display: none !important;'
+		});
+		view.appendChild(applyBtnContainer);
+		
+		// Add CSS to hide default LuCI buttons
+		if (!document.getElementById('pinpoint-services-hide-buttons')) {
+			var style = document.createElement('style');
+			style.id = 'pinpoint-services-hide-buttons';
+			style.textContent = `
+				.view-pinpoint-services .cbi-page-actions { display: none !important; }
+				.view-pinpoint-services .cbi-button-save { display: none !important; }
+				.view-pinpoint-services .cbi-button-apply { display: none !important; }
+				.view-pinpoint-services .cbi-button-reset { display: none !important; }
+			`;
+			document.head.appendChild(style);
+		}
 		
 		return view;
 	},
