@@ -1982,13 +1982,9 @@ function get_network_hosts() {
 				let interface_trimmed = trim(interface);
 				
 				// Only allow br-lan or lan interfaces - exclude everything else (wan, etc.)
-				// This is a strict whitelist approach
-				if (interface_trimmed != 'br-lan' && interface_trimmed != 'lan') {
-					continue; // Skip this entry - not a LAN interface
-				}
-				
-				// Only include if: valid MAC, LAN interface confirmed, not gateway, not router itself
-				if (mac != '00:00:00:00:00:00' && 
+				// This is a strict whitelist approach - use nested if instead of continue
+				if ((interface_trimmed == 'br-lan' || interface_trimmed == 'lan') &&
+				    mac != '00:00:00:00:00:00' && 
 				    ip != gateway_ip && 
 				    ip != lan_ip && 
 				    !seen[mac]) {
