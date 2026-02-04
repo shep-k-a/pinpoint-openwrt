@@ -630,19 +630,40 @@ return view.extend({
 										return Promise.race([
 											callApply().then(function() {
 												clearInterval(applyProgressInterval);
-												updateProgress(80, _('Правила применены'));
-												return true;
+												updateProgress(80, _('Правила применены, ожидание активации...'));
+												
+												// Wait for rules to fully activate (dnsmasq restart, nftables reload)
+												// This ensures rules are active before showing completion
+												return new Promise(function(resolve) {
+													var waitStartTime = Date.now();
+													var waitInterval = setInterval(function() {
+														var waitElapsed = (Date.now() - waitStartTime) / 1000;
+														var waitProgress = Math.min(95, 80 + (waitElapsed / 10) * 15);
+														updateProgress(waitProgress, _('Активация правил... (' + Math.round(waitElapsed) + 'с)'));
+														
+														if (waitElapsed >= 10) {
+															clearInterval(waitInterval);
+															updateProgress(95, _('Правила активированы'));
+															resolve(true);
+														}
+													}, 500);
+												});
 											}).catch(function(e) {
 												clearInterval(applyProgressInterval);
 												updateProgress(80, _('Правила применены (возможны ошибки)'));
-												return false;
+												// Still wait a bit for rules to activate
+												return new Promise(function(resolve) {
+													setTimeout(function() {
+														resolve(false);
+													}, 5000);
+												});
 											}),
 											new Promise(function(resolve) {
 												setTimeout(function() {
 													clearInterval(applyProgressInterval);
 													updateProgress(80, _('Правила применяются (таймаут ожидания)'));
 													resolve(false);
-												}, 60000); // 60 second timeout
+												}, 70000); // 70 second timeout (60s apply + 10s activation)
 											})
 										]).then(function(applySuccess) {
 											
@@ -674,20 +695,34 @@ return view.extend({
 												return Promise.race([
 													callUpdateSingleService(serviceId).then(function() {
 														clearInterval(updateProgressInterval);
-														updateProgress(100, _('Готово! Обновление завершено'));
-														setTimeout(function() {
-															ui.hideModal();
-															ui.addNotification(null, E('p', _('Сервис включён, правила применены, IP обновлены')), 'success');
-														}, 500);
-														return true;
+														updateProgress(95, _('Обновление завершено, активация правил...'));
+														
+														// Wait for rules to fully activate after update
+														return new Promise(function(resolve) {
+															setTimeout(function() {
+																updateProgress(100, _('Готово! Правила активированы'));
+																setTimeout(function() {
+																	ui.hideModal();
+																	ui.addNotification(null, E('p', _('Сервис включён, правила применены, IP обновлены')), 'success');
+																}, 500);
+																resolve(true);
+															}, 10000); // Wait 10 seconds for rules to fully activate
+														});
 													}).catch(function(e) {
 														clearInterval(updateProgressInterval);
-														updateProgress(100, _('Готово (обновление завершено с ошибками)'));
-														setTimeout(function() {
-															ui.hideModal();
-															ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP завершено с ошибками')), 'warning');
-														}, 500);
-														return false;
+														updateProgress(95, _('Обновление завершено с ошибками, активация правил...'));
+														
+														// Still wait for rules to activate
+														return new Promise(function(resolve) {
+															setTimeout(function() {
+																updateProgress(100, _('Готово (правила активированы)'));
+																setTimeout(function() {
+																	ui.hideModal();
+																	ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP завершено с ошибками')), 'warning');
+																}, 500);
+																resolve(false);
+															}, 10000);
+														});
 													}),
 													new Promise(function(resolve) {
 														setTimeout(function() {
@@ -702,16 +737,22 @@ return view.extend({
 													})
 												]);
 											} else {
-												// No update needed - just finish
-												updateProgress(100, _('Готово!'));
-												setTimeout(function() {
-													ui.hideModal();
-													if (newState) {
-														ui.addNotification(null, E('p', _('Сервис включён и правила применены')), 'success');
-													} else {
-														ui.addNotification(null, E('p', _('Сервис выключен и правила обновлены')), 'success');
-													}
-												}, 500);
+												// No update needed - wait for rules to fully activate
+												updateProgress(95, _('Активация правил...'));
+												return new Promise(function(resolve) {
+													setTimeout(function() {
+														updateProgress(100, _('Готово! Правила активированы'));
+														setTimeout(function() {
+															ui.hideModal();
+															if (newState) {
+																ui.addNotification(null, E('p', _('Сервис включён и правила применены')), 'success');
+															} else {
+																ui.addNotification(null, E('p', _('Сервис выключен и правила обновлены')), 'success');
+															}
+															resolve();
+														}, 500);
+													}, 10000); // Wait 10 seconds for rules to fully activate
+												});
 											}
 										}).catch(function(e) {
 											clearInterval(progressInterval);

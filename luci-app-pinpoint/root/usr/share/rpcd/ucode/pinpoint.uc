@@ -794,12 +794,20 @@ function set_device_services(params) {
 	return { success: true, id: device_id, services: services };
 }
 
-// Apply changes (run update script)
+// Apply changes (reload routing rules)
 function apply() {
-	let result = run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update 2>&1');
+	// Run pinpoint-apply.sh reload to apply routing rules
+	// This reloads nftables sets, regenerates dnsmasq config, and restarts dnsmasq
+	let result = run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload 2>&1');
+	
+	// Wait a bit for rules to fully apply (dnsmasq restart, nftables reload)
+	// This ensures rules are active before returning
+	run_cmd('sleep 2');
+	
 	return {
 		success: true,
-		output: result
+		output: result,
+		message: 'Rules applied successfully'
 	};
 }
 
