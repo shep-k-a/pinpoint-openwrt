@@ -662,7 +662,7 @@ function set_service(params) {
 	
 	write_json(SERVICES_FILE, data);
 	
-	// Check if service needs IP list update
+	// Check if service needs IP list update (when enabling without existing lists)
 	let needs_update = false;
 	if (enabled) {
 		let ips_file = DATA_DIR + '/lists/' + service_id + '.txt';
@@ -670,24 +670,16 @@ function set_service(params) {
 		needs_update = (!ips_stat || ips_stat.size == 0);
 	}
 	
-	// Return immediately (don't block UI)
-	// Background updates are handled by a separate detached process
-	
-	// Launch background update/apply in completely detached process
-	// Using sh -c with nohup to ensure no blocking
-	if (enabled && needs_update) {
-		// Update in background - detached from RPC process
-		system('(nohup sh -c "sleep 1; /opt/pinpoint/scripts/pinpoint-update.sh update-single ' + service_id + ' 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
-	} else if (enabled || !enabled) {
-		// Just reload rules - also detached
-		system('(nohup sh -c "sleep 0.5; /opt/pinpoint/scripts/pinpoint-apply.sh reload 2>&1 | logger -t pinpoint-apply" >/dev/null 2>&1 &) &');
-	}
+	// IMPORTANT: Do NOT call reload/update here!
+	// Frontend will handle applying changes via separate apply() call
+	// This keeps RPC response instant and prevents timeout
 	
 	return { 
 		success: true, 
 		id: service_id, 
 		enabled: !!enabled,
-		updating: needs_update
+		needs_update: needs_update,
+		message: enabled ? 'Service enabled' : 'Service disabled'
 	};
 }
 

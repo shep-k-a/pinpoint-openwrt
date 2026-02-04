@@ -590,8 +590,8 @@ return view.extend({
 										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
 										
-										// If service is updating (fetching IPs from GitHub), show notification
-										if (result.updating) {
+										// If service needs IP lists update (when enabling without lists)
+										if (result.needs_update && newState) {
 											ui.addNotification(null, E('p', [
 												'Сервис ',
 												E('strong', {}, serviceId),
@@ -599,20 +599,29 @@ return view.extend({
 												E('br'),
 												'Обновление IP и доменов с GitHub... (может занять до 30 секунд)'
 											]), 'info');
-										} else if (newState) {
-											// Service enabled with existing lists
-											ui.addNotification(null, E('p', 'Сервис включён и правила применены'), 'success');
-										} else {
-											// Service disabled
-											ui.addNotification(null, E('p', 'Сервис выключен и правила обновлены'), 'success');
+											// Trigger background update (don't wait for it)
+											callUpdateSingleService(serviceId).catch(function(e) {
+												console.log('Background update error (non-critical):', e);
+											});
 										}
+										
+										// Always apply rules after enable/disable (in background)
+										return callApply().then(function() {
+											if (newState) {
+												ui.addNotification(null, E('p', 'Сервис включён и правила применены'), 'success');
+											} else {
+												ui.addNotification(null, E('p', 'Сервис выключен и правила обновлены'), 'success');
+											}
+										}).catch(function(e) {
+											ui.addNotification(null, E('p', 'Правила применены, но возможны ошибки: ' + (e.message || e)), 'warning');
+										});
 									}
 								})
 							).then(function() {
 								btn.disabled = false;
 								self.updateStats();
 							}).catch(function(e) {
-								ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+								ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
 								btn.disabled = false;
 								btn.textContent = origText;
 							});
