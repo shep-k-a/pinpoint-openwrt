@@ -287,7 +287,12 @@ return view.extend({
 								ui.addNotification(null, E('p', _('Update error: ') + (e.message || e)), 'danger');
 							});
 						})
-					}, _('Update Lists Now')),
+					}, _('Обновить все включённые сервисы')),
+					
+					E('div', { 'style': 'width: 100%; padding: 5px 0; color: #666; font-size: 0.9em;' }, [
+						_('Используйте эту кнопку для принудительного обновления IP и доменов всех включённых сервисов (если списки устарели). '),
+						_('При включении отдельного сервиса обновление происходит автоматически.')
+					]),
 					
 					E('button', {
 						'class': 'btn cbi-button cbi-button-action',

@@ -333,6 +333,106 @@ count_sources() {
 }
 
 # Update all enabled services
+# Update single service by ID
+update_single_service() {
+    local target_service_id="$1"
+    
+    if [ -z "$target_service_id" ]; then
+        log "ERROR: Service ID required"
+        return 1
+    fi
+    
+    log "=== Updating single service: $target_service_id ==="
+    
+    if ! command -v jsonfilter >/dev/null 2>&1; then
+        log "ERROR: jsonfilter not found"
+        return 1
+    fi
+    
+    # Find service index
+    service_count=0
+    service_idx=-1
+    while true; do
+        test_id=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_count].id" 2>/dev/null)
+        if [ -z "$test_id" ]; then
+            break
+        fi
+        if [ "$test_id" = "$target_service_id" ]; then
+            service_idx=$service_count
+            break
+        fi
+        service_count=$((service_count + 1))
+    done
+    
+    if [ "$service_idx" -lt 0 ]; then
+        log "ERROR: Service '$target_service_id' not found"
+        return 1
+    fi
+    
+    log "Found service at index $service_idx"
+    
+    local success=0
+    local failed=0
+    
+    # Extract domains to file
+    extract_service_domains "$service_idx" "$target_service_id"
+    
+    # Extract static IP ranges
+    extract_service_ips "$service_idx" "$target_service_id"
+    
+    # Download external sources
+    source_count=$(count_sources "$target_service_id" 2>&1)
+    source_count=$(echo "$source_count" | tail -1 | xargs)
+    
+    if [ -z "$source_count" ]; then
+        source_count=0
+    fi
+    
+    if ! echo "$source_count" | grep -qE '^[0-9]+$'; then
+        log "WARNING: Invalid source count, treating as 0"
+        source_count=0
+    fi
+    
+    if [ "$source_count" -gt 0 ] 2>/dev/null; then
+        log "Found $source_count source(s) for $target_service_id"
+        
+        # Clear IP output file before processing sources
+        > "$LISTS_DIR/${target_service_id}.txt" 2>/dev/null || true
+        
+        # Process all sources
+        source_idx=0
+        while [ "$source_idx" -lt "$source_count" ]; do
+            source_url=$(get_source_by_index "$target_service_id" "$source_idx" "url")
+            source_type=$(get_source_by_index "$target_service_id" "$source_idx" "type")
+            
+            if [ -z "$source_url" ]; then
+                source_idx=$((source_idx + 1))
+                continue
+            fi
+            
+            log "Processing source $((source_idx + 1))/$source_count: $source_url (type: ${source_type:-auto})"
+            
+            if process_source "$target_service_id" "$source_url" "${source_type:-auto}"; then
+                success=$((success + 1))
+            else
+                failed=$((failed + 1))
+            fi
+            
+            source_idx=$((source_idx + 1))
+        done
+    fi
+    
+    log "=== Update complete for $target_service_id: $success succeeded, $failed failed ==="
+    
+    # Cleanup
+    rm -rf "$TEMP_DIR"
+    
+    # Apply the new rules
+    sh /opt/pinpoint/scripts/pinpoint-apply.sh reload
+    
+    return 0
+}
+
 update_all_services() {
     log "=== Starting list update ==="
     
@@ -465,11 +565,22 @@ if [ "$(basename "$0" 2>/dev/null)" = "pinpoint-update.sh" ] || [ -n "${PINPOINT
             # Apply the new rules (через sh на случай проблем с исполняемым битом/CRLF)
             sh /opt/pinpoint/scripts/pinpoint-apply.sh reload
             ;;
+        update-single)
+            if [ -z "$2" ]; then
+                echo "ERROR: Service ID required"
+                echo "Usage: $0 update-single <service_id>"
+                exit 1
+            fi
+            update_single_service "$2"
+            ;;
         show|list)
             show_lists
             ;;
         *)
-            echo "Usage: $0 {update|show}"
+            echo "Usage: $0 {update|update-single <service_id>|show}"
+            echo "  update                   - Update all enabled services"
+            echo "  update-single <service>  - Update a single service by ID"
+            echo "  show                     - Show downloaded lists"
             exit 1
             ;;
     esac

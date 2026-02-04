@@ -590,21 +590,22 @@ return view.extend({
 										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
 										
-										// If service needs IP lists update, notify user
-										if (result.needs_update) {
+										// If service is updating (fetching IPs from GitHub), show notification
+										if (result.updating) {
 											ui.addNotification(null, E('p', [
-												'Сервис включён. ',
-												E('strong', {}, 'IP списки отсутствуют.'),
+												'Сервис ',
+												E('strong', {}, serviceId),
+												' включён. ',
 												E('br'),
-												'Перейдите в ',
-												E('a', { 'href': '#', 'click': function() {
-													window.location.href = '/cgi-bin/luci/admin/services/pinpoint/settings';
-												}}, 'Настройки'),
-												' и нажмите "Обновить списки"'
-											]), 'warning');
+												'Обновление IP и доменов с GitHub... (может занять до 30 секунд)'
+											]), 'info');
+										} else if (newState) {
+											// Service enabled with existing lists
+											ui.addNotification(null, E('p', 'Сервис включён и правила применены'), 'success');
+										} else {
+											// Service disabled
+											ui.addNotification(null, E('p', 'Сервис выключен и правила обновлены'), 'success');
 										}
-										
-										return callApply();
 									}
 								})
 							).then(function() {

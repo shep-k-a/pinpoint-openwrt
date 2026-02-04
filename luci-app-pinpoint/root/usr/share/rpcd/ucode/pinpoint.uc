@@ -662,23 +662,29 @@ function set_service(params) {
 	
 	write_json(SERVICES_FILE, data);
 	
-	// If enabling a service, check if it has IP lists
-	// If not, trigger update for this service only (background)
-	let needs_update = false;
+	// If enabling a service, automatically update its lists
 	if (enabled) {
 		let ips_file = DATA_DIR + '/lists/' + service_id + '.txt';
 		let ips_stat = stat(ips_file);
-		// Check if file doesn't exist or is empty
+		// Check if file doesn't exist or is empty - trigger update
 		if (!ips_stat || ips_stat.size == 0) {
-			needs_update = true;
+			// Update in background (don't block UI)
+			// Try Python first, fallback to shell
+			run_cmd('(/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-single ' + service_id + ' 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update-single ' + service_id + ' 2>&1) >/dev/null 2>&1 &');
+		} else {
+			// Lists exist, just reload nftables/dnsmasq
+			run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 &');
 		}
+	} else {
+		// If disabling, reload rules (will remove service from sets)
+		run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 &');
 	}
 	
 	return { 
 		success: true, 
 		id: service_id, 
 		enabled: !!enabled,
-		needs_update: needs_update
+		updating: enabled && (!stat(DATA_DIR + '/lists/' + service_id + '.txt') || stat(DATA_DIR + '/lists/' + service_id + '.txt').size == 0)
 	};
 }
 
@@ -1570,6 +1576,32 @@ function update_lists() {
 	return { success: false, error: 'Update failed - both Python and shell scripts returned no output' };
 }
 
+// Update single service by ID
+function update_single_service(params) {
+	let service_id = params.service_id;
+	
+	if (!service_id) {
+		return { success: false, error: 'Service ID required' };
+	}
+	
+	// Try Python first (Full mode), fallback to shell (Lite mode)
+	let python_result = run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-single ' + service_id + ' 2>&1');
+	
+	if (python_result !== null && python_result != '') {
+		// Python script executed (Full mode)
+		return { success: true, service_id: service_id, output: python_result };
+	}
+	
+	// Fallback to shell script (Lite mode)
+	let shell_result = run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update-single ' + service_id + ' 2>&1');
+	
+	if (shell_result !== null && shell_result != '') {
+		return { success: true, service_id: service_id, output: shell_result };
+	}
+	
+	return { success: false, error: 'Update failed for service: ' + service_id };
+}
+
 // Get system info
 function get_system_info() {
 	let singbox_ver = run_cmd('sing-box version 2>/dev/null | head -1');
@@ -2417,6 +2449,12 @@ const methods = {
 	update_lists: {
 		call: function() {
 			return update_lists();
+		}
+	},
+	update_single_service: {
+		args: { service_id: 'service_id' },
+		call: function(req) {
+			return update_single_service(req.args);
 		}
 	},
 	system_info: {

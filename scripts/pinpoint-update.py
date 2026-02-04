@@ -911,6 +911,43 @@ def update_services_from_github():
     log(f"Updated {len(services_data['services'])} services from GitHub")
     return True
 
+def update_single_service(service_id):
+    """Update a single service by ID"""
+    log(f"=== Updating single service: {service_id} ===")
+    
+    if not SERVICES_FILE.exists():
+        log(f"Services file not found: {SERVICES_FILE}")
+        return 1
+    
+    with open(SERVICES_FILE) as f:
+        data = json.load(f)
+    
+    # Find the service
+    service = None
+    for s in data.get('services', []):
+        if s.get('id') == service_id:
+            service = s
+            break
+    
+    if not service:
+        log(f"Service '{service_id}' not found")
+        return 1
+    
+    # Process the service
+    try:
+        process_service(service)
+        log(f"Successfully updated {service_id}")
+    except Exception as e:
+        log(f"Error processing {service_id}: {e}")
+        return 1
+    
+    # Apply rules: reload nftables and dnsmasq
+    log("Applying rules...")
+    subprocess.run(["/opt/pinpoint/scripts/pinpoint-apply.sh", "reload"], check=False)
+    
+    log(f"=== Update complete for {service_id} ===")
+    return 0
+
 def update_all(update_github=False):
     """Main update function"""
     log("=== Starting list update ===")
@@ -1019,8 +1056,18 @@ if __name__ == "__main__":
         sys.exit(update_all(update_github=False))
     elif cmd == "update-github":
         sys.exit(update_all(update_github=True))
+    elif cmd == "update-single":
+        if len(sys.argv) < 3:
+            print("ERROR: Service ID required")
+            print(f"Usage: {sys.argv[0]} update-single <service_id>")
+            sys.exit(1)
+        sys.exit(update_single_service(sys.argv[2]))
     elif cmd in ("show", "status"):
         show_status()
     else:
-        print(f"Usage: {sys.argv[0]} {{update|update-github|show}}")
+        print(f"Usage: {sys.argv[0]} {{update|update-github|update-single <service_id>|show}}")
+        print("  update                   - Update all enabled services")
+        print("  update-github            - Force update services.json from GitHub")
+        print("  update-single <service>  - Update a single service by ID")
+        print("  show                     - Show status and statistics")
         sys.exit(1)
