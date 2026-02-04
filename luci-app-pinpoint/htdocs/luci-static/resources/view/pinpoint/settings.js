@@ -473,13 +473,14 @@ return view.extend({
 		
 		// Check if Full mode (Python available) to show update time
 		callGetSystemInfo().then(function(sysinfo) {
-			var hasPython = sysinfo && sysinfo.singbox_version && sysinfo.singbox_version !== _('Not installed');
+			// Full mode check: Python must be installed
+			var hasPython = sysinfo && sysinfo.python_version && sysinfo.python_version !== 'Not installed';
 			var updateTimeRow = document.getElementById('update-time-row');
 			if (updateTimeRow) {
 				updateTimeRow.style.display = hasPython ? 'table-row' : 'none';
 			}
 		}).catch(function() {
-			// If system_info fails, assume Lite mode
+			// If system_info fails, assume Lite mode (hide update_time)
 			var updateTimeRow = document.getElementById('update-time-row');
 			if (updateTimeRow) {
 				updateTimeRow.style.display = 'none';

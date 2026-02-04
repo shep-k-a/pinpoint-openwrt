@@ -1205,10 +1205,10 @@ create_init_script() {
     step "Creating PinPoint init.d service..."
     
     if [ "$INSTALL_MODE" = "lite" ]; then
-        # Lite mode: just routing, no Python backend
+        # Lite mode: VPN + shell scripts (no Python backend)
         cat > /etc/init.d/pinpoint << 'INITEOF'
 #!/bin/sh /etc/rc.common
-# Pinpoint - Selective routing service for OpenWrt (Lite Mode)
+# Pinpoint - VPN + Policy Routing (Lite Mode - shell scripts)
 
 START=99
 STOP=10
