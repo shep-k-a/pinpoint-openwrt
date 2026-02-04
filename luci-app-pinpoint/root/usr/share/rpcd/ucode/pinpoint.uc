@@ -518,13 +518,11 @@ function get_status() {
 	// Check if tun1 is up
 	let tun_up = (stat('/sys/class/net/tun1') != null);
 	
-	// Check sing-box process (only relevant in Full mode)
+	// Check sing-box process (both modes use VPN!)
 	let singbox_running = false;
-	if (is_full_mode) {
-		let ps_out = run_cmd('pgrep sing-box');
-		if (ps_out && trim(ps_out) != '') {
-			singbox_running = true;
-		}
+	let ps_out = run_cmd('pgrep sing-box');
+	if (ps_out && trim(ps_out) != '') {
+		singbox_running = true;
 	}
 	
 	// Check https-dns-proxy (DoH)
