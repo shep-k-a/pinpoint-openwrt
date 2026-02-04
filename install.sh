@@ -821,6 +821,17 @@ install_dependencies() {
     /etc/init.d/dnsmasq restart 2>/dev/null || true
     info "DNS query logging enabled (use: logread | grep query)"
     
+    # Increase LuCI/RPC timeouts for slow operations (GitHub updates, IP loading, etc.)
+    step "Configuring LuCI/RPC timeouts..."
+    uci set rpcd.@rpcd[0].socket_timeout='180' 2>/dev/null || true
+    uci commit rpcd 2>/dev/null || true
+    uci set uhttpd.main.script_timeout='180' 2>/dev/null || true
+    uci set uhttpd.main.network_timeout='180' 2>/dev/null || true
+    uci commit uhttpd 2>/dev/null || true
+    /etc/init.d/rpcd restart 2>/dev/null || true
+    /etc/init.d/uhttpd restart 2>/dev/null || true
+    info "LuCI/RPC timeouts set to 180 seconds (prevents XHR timeout errors)"
+    
     # Lua for LuCI integration
     install_package "lua" "Lua runtime"
     install_package "luci-compat" "LuCI compatibility"
@@ -2023,6 +2034,17 @@ install_luci_app() {
     uci commit dhcp 2>/dev/null || true
     /etc/init.d/dnsmasq restart 2>/dev/null || true
     info "DNS query logging enabled (use: logread | grep query)"
+    
+    # Increase LuCI/RPC timeouts for slow operations (GitHub updates, IP loading, etc.)
+    step "Configuring LuCI/RPC timeouts..."
+    uci set rpcd.@rpcd[0].socket_timeout='180' 2>/dev/null || true
+    uci commit rpcd 2>/dev/null || true
+    uci set uhttpd.main.script_timeout='180' 2>/dev/null || true
+    uci set uhttpd.main.network_timeout='180' 2>/dev/null || true
+    uci commit uhttpd 2>/dev/null || true
+    /etc/init.d/rpcd restart 2>/dev/null || true
+    /etc/init.d/uhttpd restart 2>/dev/null || true
+    info "LuCI/RPC timeouts set to 180 seconds (prevents XHR timeout errors)"
     
     # Create directories
     step "Creating directories..."
