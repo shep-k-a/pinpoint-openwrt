@@ -1622,7 +1622,8 @@ CRONEOF
     cat > /etc/cron.d/singbox-restart << 'CRONEOF'
 # Restart sing-box daily at 4 AM to prevent memory leaks
 # This is critical for routers with limited RAM (< 512 MB)
-0 4 * * * root killall -9 sing-box 2>/dev/null; sleep 3; /usr/bin/sing-box run -c /etc/sing-box/config.json -D >/dev/null 2>&1 &
+# Using init.d script ensures proper cleanup and routing restart
+0 4 * * * root /etc/init.d/sing-box restart >/dev/null 2>&1
 CRONEOF
     info "sing-box will auto-restart daily at 4:00 AM (prevents memory leaks)"
     
