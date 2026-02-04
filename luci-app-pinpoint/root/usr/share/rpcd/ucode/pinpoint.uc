@@ -1401,7 +1401,7 @@ function get_custom_services() {
 function add_custom_service(params) {
 	let name = params.name;
 	let domains = params.domains || [];
-	let ips = params.ips || [];
+	let ip_ranges = params.ip_ranges || [];
 	
 	if (!name) {
 		return { error: 'Name is required' };
@@ -1418,7 +1418,7 @@ function add_custom_service(params) {
 		id: id,
 		name: name,
 		domains: domains,
-		ips: ips,
+		ips: ip_ranges,
 		enabled: true
 	});
 	
@@ -1566,15 +1566,15 @@ function update_lists() {
 	
 	// Check if Python is available (Full mode)
 	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
-	let is_python = (has_python == 'yes\n' || has_python == 'yes');
+	let is_python = (trim(has_python) == 'yes');
 	
-	// Start update in background using run_cmd with & (works in ucode)
+	// Start update in background using simple system call
 	if (is_python) {
 		// Full mode: use Python script
-		run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 &');
+		system('sh -c "/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 &"');
 	} else {
 		// Lite mode: use shell script
-		run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 &');
+		system('sh -c "/opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 &"');
 	}
 	
 	// Return immediately - update runs in background
@@ -2420,13 +2420,18 @@ const methods = {
 			return health_check();
 		}
 	},
+	services: {
+		call: function() {
+			return get_services();
+		}
+	},
 	custom_services: {
 		call: function() {
 			return get_custom_services();
 		}
 	},
 	add_custom_service: {
-		args: { name: 'name', domains: [], ips: [] },
+		args: { name: 'name', domains: [], ip_ranges: [] },
 		call: function(req) {
 			return add_custom_service(req.args);
 		}
