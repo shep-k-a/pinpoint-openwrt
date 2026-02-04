@@ -2387,7 +2387,23 @@ main() {
     
     # Branch based on mode
     if [ "$INSTALL_MODE" = "lite" ]; then
-        # Lite installation
+        # Lite installation (no VPN tunnels, only policy routing)
+        
+        # Stop and disable any existing sing-box service (prevents conflicts)
+        if [ -f /etc/init.d/sing-box ]; then
+            step "Stopping and disabling system sing-box (Lite mode doesn't need VPN)..."
+            /etc/init.d/sing-box stop >/dev/null 2>&1 || true
+            /etc/init.d/sing-box disable >/dev/null 2>&1 || true
+            info "System sing-box disabled (Lite mode uses only policy routing)"
+        fi
+        
+        # Remove tun1 if it exists
+        if [ -d /sys/class/net/tun1 ]; then
+            step "Removing existing tun1 interface..."
+            ip link set tun1 down 2>/dev/null || true
+            ip link delete tun1 2>/dev/null || true
+        fi
+        
         install_luci_app
         create_init_script
         create_routing_scripts
