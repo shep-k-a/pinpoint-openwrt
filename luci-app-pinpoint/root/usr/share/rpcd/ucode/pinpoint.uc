@@ -1940,8 +1940,16 @@ function get_network_hosts() {
 				let name = parts[3];
 				if (name == '*') name = '';
 				
-				// Filter: only LAN IPs, exclude gateway
-				if (is_lan_ip(ip) && ip != gateway_ip && ip != lan_ip) {
+				// Filter: only LAN IPs, exclude gateway and router itself
+				// Check if IP is in same subnet as LAN IP (first 3 octets match for /24)
+				let ip_parts = split(ip, /\./);
+				let lan_parts = split(lan_ip, /\./);
+				let is_lan = (length(lan_parts) >= 3 && length(ip_parts) >= 3 &&
+				              lan_parts[0] == ip_parts[0] && 
+				              lan_parts[1] == ip_parts[1] && 
+				              lan_parts[2] == ip_parts[2]);
+				
+				if (is_lan && ip != gateway_ip && ip != lan_ip) {
 					if (!seen[mac]) {
 						push(hosts, {
 							mac: mac,
@@ -1968,8 +1976,16 @@ function get_network_hosts() {
 				let mac = parts[3];
 				
 				// Filter: only LAN IPs, exclude gateway and router itself
+				// Check if IP is in same subnet as LAN IP (first 3 octets match for /24)
+				let ip_parts = split(ip, /\./);
+				let lan_parts = split(lan_ip, /\./);
+				let is_lan = (length(lan_parts) >= 3 && length(ip_parts) >= 3 &&
+				              lan_parts[0] == ip_parts[0] && 
+				              lan_parts[1] == ip_parts[1] && 
+				              lan_parts[2] == ip_parts[2]);
+				
 				if (mac != '00:00:00:00:00:00' && 
-				    is_lan_ip(ip) && 
+				    is_lan && 
 				    ip != gateway_ip && 
 				    ip != lan_ip && 
 				    !seen[mac]) {
