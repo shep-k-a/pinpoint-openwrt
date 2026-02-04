@@ -2431,7 +2431,7 @@ const methods = {
 		}
 	},
 	add_custom_service: {
-		args: { name: 'name', domains: [], ip_ranges: [] },
+		args: { name: '', domains: [], ip_ranges: [] },
 		call: function(req) {
 			return add_custom_service(req.args);
 		}
