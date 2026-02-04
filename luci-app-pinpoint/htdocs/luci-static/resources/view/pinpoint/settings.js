@@ -35,24 +35,25 @@ var callGetSystemInfo = rpc.declare({
 	expect: { }
 });
 
-var callAdblockStatus = rpc.declare({
-	object: 'luci.pinpoint',
-	method: 'adblock_status',
-	expect: { }
-});
-
-var callToggleAdblock = rpc.declare({
-	object: 'luci.pinpoint',
-	method: 'toggle_adblock',
-	params: ['enabled'],
-	expect: { }
-});
-
-var callUpdateAdblock = rpc.declare({
-	object: 'luci.pinpoint',
-	method: 'update_adblock',
-	expect: { }
-});
+// AdBlock temporarily disabled - will be re-enabled after main system is stable
+// var callAdblockStatus = rpc.declare({
+// 	object: 'luci.pinpoint',
+// 	method: 'adblock_status',
+// 	expect: { }
+// });
+// 
+// var callToggleAdblock = rpc.declare({
+// 	object: 'luci.pinpoint',
+// 	method: 'toggle_adblock',
+// 	params: ['enabled'],
+// 	expect: { }
+// });
+// 
+// var callUpdateAdblock = rpc.declare({
+// 	object: 'luci.pinpoint',
+// 	method: 'update_adblock',
+// 	expect: { }
+// });
 
 var callExportConfig = rpc.declare({
 	object: 'luci.pinpoint',
@@ -123,15 +124,16 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			callGetSettings(),
-			callGetSystemInfo().catch(function() { return {}; }),
-			callAdblockStatus().catch(function() { return {}; })
+			callGetSystemInfo().catch(function() { return {}; })
+			// AdBlock temporarily disabled
+			// callAdblockStatus().catch(function() { return {}; })
 		]);
 	},
 
 	render: function(data) {
 		var settings = data[0] || {};
 		var sysinfo = data[1] || {};
-		var adblock = data[2] || {};
+		// var adblock = data[2] || {}; // AdBlock temporarily disabled
 		var self = this;
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
@@ -337,82 +339,9 @@ return view.extend({
 			])
 		]));
 		
-		// AdBlock Section
-		view.appendChild(E('h3', {}, _('AdBlock')));
-		view.appendChild(E('div', { 'class': 'cbi-section' }, [
-			E('div', { 'class': 'cbi-section-node' }, [
-				E('div', { 'class': 'table' }, [
-					E('div', { 'class': 'tr' }, [
-						E('div', { 'class': 'td left', 'style': 'width: 200px;' }, _('Status')),
-						E('div', { 'class': 'td' }, [
-							E('span', { 
-								'id': 'adblock-status',
-								'style': 'color: ' + (adblock.enabled ? '#22c55e' : '#ef4444') + ';'
-							}, adblock.enabled ? _('Enabled') : _('Disabled'))
-						])
-					]),
-					E('div', { 'class': 'tr' }, [
-						E('div', { 'class': 'td left' }, _('Blocked Domains')),
-						E('div', { 'class': 'td', 'id': 'adblock-count' }, adblock.blocked_domains || 0)
-					]),
-					E('div', { 'class': 'tr' }, [
-						E('div', { 'class': 'td left' }, _('Last Update')),
-						E('div', { 'class': 'td', 'id': 'adblock-updated' }, adblock.last_update || _('Never'))
-					])
-				]),
-				E('div', { 'style': 'margin-top: 10px; display: flex; gap: 10px;' }, [
-					E('button', {
-						'class': 'btn cbi-button ' + (adblock.enabled ? 'cbi-button-negative' : 'cbi-button-apply'),
-						'id': 'adblock-toggle-btn',
-						'click': ui.createHandlerFn(self, function() {
-							var newState = !adblock.enabled;
-							
-							ui.showModal(newState ? _('Enabling...') : _('Disabling...'), [
-								E('p', { 'class': 'spinning' }, _('Updating AdBlock...'))
-							]);
-							
-							return callToggleAdblock(newState).then(function(result) {
-								ui.hideModal();
-								if (result.success) {
-									adblock.enabled = result.enabled;
-									var statusEl = document.getElementById('adblock-status');
-									var btn = document.getElementById('adblock-toggle-btn');
-									statusEl.textContent = result.enabled ? _('Enabled') : _('Disabled');
-									statusEl.style.color = result.enabled ? '#22c55e' : '#ef4444';
-									btn.textContent = result.enabled ? _('Disable AdBlock') : _('Enable AdBlock');
-									btn.className = 'btn cbi-button ' + (result.enabled ? 'cbi-button-negative' : 'cbi-button-apply');
-									ui.addNotification(null, E('p', _('AdBlock ') + (result.enabled ? _('enabled') : _('disabled'))), 'success');
-								}
-							});
-						})
-					}, adblock.enabled ? _('Disable AdBlock') : _('Enable AdBlock')),
-					
-					E('button', {
-						'class': 'btn cbi-button cbi-button-action',
-						'click': ui.createHandlerFn(self, function() {
-							if (!adblock.enabled) {
-								ui.addNotification(null, E('p', _('Enable AdBlock first')), 'warning');
-								return;
-							}
-							
-							ui.showModal(_('Updating...'), [
-								E('p', { 'class': 'spinning' }, _('Downloading blocklists...'))
-							]);
-							
-							return callUpdateAdblock().then(function(result) {
-								ui.hideModal();
-								if (result.success) {
-									document.getElementById('adblock-count').textContent = result.count || 0;
-									ui.addNotification(null, E('p', _('Blocklists updated: ') + (result.count || 0) + _(' domains')), 'success');
-								} else {
-									ui.addNotification(null, E('p', result.error || _('Update failed')), 'danger');
-								}
-							});
-						})
-					}, _('Update Blocklists'))
-				])
-			])
-		]));
+		// AdBlock Section - temporarily disabled
+		// view.appendChild(E('h3', {}, _('AdBlock')));
+		// ... AdBlock code commented out until main system is stable ...
 		
 		// Export/Import Section
 		view.appendChild(E('h3', {}, _('Backup & Restore')));
