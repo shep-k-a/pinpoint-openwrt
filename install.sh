@@ -807,6 +807,20 @@ install_dependencies() {
         /etc/init.d/dnsmasq restart 2>/dev/null || true
     fi
     
+    # Force clients to use router DNS (critical for nftset to work!)
+    step "Configuring DHCP to force router DNS..."
+    uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
+    uci add_list dhcp.lan.dhcp_option='6,192.168.5.1' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+    info "DHCP configured to force clients to use router DNS (192.168.5.1)"
+    
+    # Enable DNS query logging for debugging
+    step "Enabling DNS query logging..."
+    uci set dhcp.@dnsmasq[0].logqueries='1' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+    /etc/init.d/dnsmasq restart 2>/dev/null || true
+    info "DNS query logging enabled (use: logread | grep query)"
+    
     # Lua for LuCI integration
     install_package "lua" "Lua runtime"
     install_package "luci-compat" "LuCI compatibility"
@@ -1592,6 +1606,15 @@ CRONEOF
         info "  - Note: Lists are updated once during installation"
     fi
     
+    # Add sing-box daily restart to prevent memory leaks (both modes)
+    step "Installing sing-box auto-restart (prevents memory leaks)..."
+    cat > /etc/cron.d/singbox-restart << 'CRONEOF'
+# Restart sing-box daily at 4 AM to prevent memory leaks
+# This is critical for routers with limited RAM (< 512 MB)
+0 4 * * * root killall -9 sing-box 2>/dev/null; sleep 3; /usr/bin/sing-box run -c /etc/sing-box/config.json -D >/dev/null 2>&1 &
+CRONEOF
+    info "sing-box will auto-restart daily at 4:00 AM (prevents memory leaks)"
+    
     # Restart cron if running
     /etc/init.d/cron restart 2>/dev/null || true
 }
@@ -1986,6 +2009,20 @@ install_luci_app() {
         uci commit dhcp 2>/dev/null || true
         /etc/init.d/dnsmasq restart 2>/dev/null || true
     fi
+    
+    # Force clients to use router DNS (critical for nftset to work!)
+    step "Configuring DHCP to force router DNS..."
+    uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
+    uci add_list dhcp.lan.dhcp_option='6,192.168.5.1' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+    info "DHCP configured to force clients to use router DNS (192.168.5.1)"
+    
+    # Enable DNS query logging for debugging
+    step "Enabling DNS query logging..."
+    uci set dhcp.@dnsmasq[0].logqueries='1' 2>/dev/null || true
+    uci commit dhcp 2>/dev/null || true
+    /etc/init.d/dnsmasq restart 2>/dev/null || true
+    info "DNS query logging enabled (use: logread | grep query)"
     
     # Create directories
     step "Creating directories..."
