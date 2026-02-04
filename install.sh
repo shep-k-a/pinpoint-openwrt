@@ -1906,12 +1906,13 @@ install_luci_app() {
     echo -e "${BLUE}Installing LuCI App (Lite Mode)${NC}"
     echo "----------------------------------------"
     
-    # Required packages for lite mode
+    # Required packages for lite mode (NO sing-box, NO VPN)
     step "Installing minimal dependencies..."
     install_package "curl" "cURL"
     install_package "ca-certificates" "CA certificates"
-    install_singbox
-    install_package "kmod-tun" "TUN kernel module"
+    
+    # Note: sing-box and kmod-tun are NOT needed in Lite mode
+    # Lite mode only does policy routing without VPN tunnels
     
     if command -v nft >/dev/null 2>&1; then
         info "nftables - already installed"
