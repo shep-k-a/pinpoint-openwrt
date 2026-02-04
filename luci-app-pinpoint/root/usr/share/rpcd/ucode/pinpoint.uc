@@ -577,14 +577,42 @@ function get_status() {
 	};
 }
 
-// Get all services
+// Get all services (with IPs loaded from files)
 function get_services() {
 	let data = read_json(SERVICES_FILE);
 	if (!data) {
 		return { services: [], categories: {} };
 	}
+	
+	// Load IPs from files for each service
+	let services = data.services || [];
+	for (let i = 0; i < length(services); i++) {
+		let service = services[i];
+		let service_id = service.id;
+		
+		// Load IPs from {service_id}.txt file
+		let ips_file = DATA_DIR + '/lists/' + service_id + '.txt';
+		let ips_content = readfile(ips_file);
+		let ips = [];
+		
+		if (ips_content) {
+			ips_content = trim(ips_content);
+			let lines = split(ips_content, '\n');
+			for (let j = 0; j < length(lines); j++) {
+				let line = trim(lines[j]);
+				// Skip comments and empty lines
+				if (line && !match(line, /^#/)) {
+					push(ips, line);
+				}
+			}
+		}
+		
+		// Add ips field to service
+		services[i].ips = ips;
+	}
+	
 	return {
-		services: data.services || [],
+		services: services,
 		categories: data.categories || {}
 	};
 }
