@@ -1247,8 +1247,20 @@ start_service() {
     # Initialize nftables and policy routing
     /opt/pinpoint/scripts/pinpoint-init.sh start
     
-    # Apply current rules
+    # Apply current rules (creates dnsmasq config and loads IPs)
     /opt/pinpoint/scripts/pinpoint-apply.sh reload
+    
+    # Start sing-box if tunnels exist
+    if [ -f /opt/pinpoint/data/tunnels.json ]; then
+        /etc/init.d/sing-box enable >/dev/null 2>&1 || true
+        /etc/init.d/sing-box start >/dev/null 2>&1 || true
+        sleep 1
+    fi
+    
+    # Restart dnsmasq to load new config
+    if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
+        /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+    fi
     
     logger -t pinpoint "Pinpoint service started"
 }
@@ -2475,6 +2487,42 @@ main() {
             info "Services and routing initialized"
         else
             warn "pinpoint-update.sh not found, services update skipped"
+        fi
+        
+        # Apply routing rules (creates dnsmasq config and loads IPs)
+        if [ -f /opt/pinpoint/scripts/pinpoint-apply.sh ]; then
+            step "Applying routing rules..."
+            /opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 || true
+            info "Routing rules applied"
+        else
+            warn "pinpoint-apply.sh not found, routing rules not applied"
+        fi
+        
+        # Start sing-box if tunnels exist
+        if [ -f /opt/pinpoint/data/tunnels.json ]; then
+            step "Starting sing-box..."
+            /etc/init.d/sing-box enable >/dev/null 2>&1 || true
+            /etc/init.d/sing-box start >/dev/null 2>&1 || true
+            sleep 2
+            if pgrep -x sing-box >/dev/null 2>&1; then
+                info "sing-box started"
+            else
+                warn "sing-box failed to start (check logs: logread | grep sing-box)"
+            fi
+        else
+            info "No tunnels configured yet - sing-box will start when subscription is added"
+        fi
+        
+        # Restart dnsmasq to load new config
+        if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
+            step "Restarting dnsmasq..."
+            /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+            sleep 1
+            if /etc/init.d/dnsmasq running >/dev/null 2>&1; then
+                info "dnsmasq restarted with new configuration"
+            else
+                warn "dnsmasq failed to restart (check logs: logread | grep dnsmasq)"
+            fi
         fi
         
         cleanup_install
