@@ -348,7 +348,17 @@ update_all_services() {
     fi
     
     # Process each service (use index-based access to avoid jsonfilter filtering issues)
-    service_count=$(jsonfilter -i "$SERVICES_FILE" -e '@.services' 2>/dev/null | grep -c '"id"' || echo 0)
+    # Count services by iterating until we get empty result
+    service_count=0
+    while true; do
+        test_id=$(jsonfilter -i "$SERVICES_FILE" -e "@.services[$service_count].id" 2>/dev/null)
+        if [ -z "$test_id" ]; then
+            break
+        fi
+        service_count=$((service_count + 1))
+    done
+    
+    log "Found $service_count services in total"
     
     service_idx=0
     while [ "$service_idx" -lt "$service_count" ]; do
