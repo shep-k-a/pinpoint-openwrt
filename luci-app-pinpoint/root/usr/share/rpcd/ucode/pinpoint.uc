@@ -620,6 +620,44 @@ function set_service(params) {
 	return { success: true, id: service_id, enabled: !!enabled };
 }
 
+// Edit service (add custom domains and IPs)
+function edit_service(params) {
+	let service_id = params.id;
+	let custom_domains = params.custom_domains || [];
+	let custom_ips = params.custom_ips || [];
+	
+	if (!service_id) {
+		return { error: 'Missing service id' };
+	}
+	
+	let data = read_json(SERVICES_FILE);
+	if (!data || !data.services) {
+		return { error: 'Services file not found' };
+	}
+	
+	let found = false;
+	for (let i = 0; i < length(data.services); i++) {
+		if (data.services[i].id == service_id) {
+			// Store custom entries
+			data.services[i].custom_domains = custom_domains;
+			data.services[i].custom_ips = custom_ips;
+			found = true;
+			break;
+		}
+	}
+	
+	if (!found) {
+		return { error: 'Service not found' };
+	}
+	
+	write_json(SERVICES_FILE, data);
+	
+	// Apply changes immediately
+	run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 &');
+	
+	return { success: true, id: service_id };
+}
+
 // Get all devices
 function get_devices() {
 	let data = read_json(DEVICES_FILE);
@@ -2218,6 +2256,12 @@ const methods = {
 		args: { id: 'id', enabled: true },
 		call: function(req) {
 			return set_service(req.args);
+		}
+	},
+	edit_service: {
+		args: { id: 'id', custom_domains: [], custom_ips: [] },
+		call: function(req) {
+			return edit_service(req.args);
 		}
 	},
 	devices: {

@@ -79,6 +79,58 @@ load_service_lists() {
     fi
 }
 
+# Load custom IPs from services.json (user-added IPs)
+load_service_custom_ips() {
+    local services_file="$DATA_DIR/services.json"
+    
+    if [ ! -f "$services_file" ]; then
+        return 0
+    fi
+    
+    if ! command -v jsonfilter >/dev/null 2>&1; then
+        log "jsonfilter not found, skipping service custom IPs"
+        return 0
+    fi
+    
+    log "Loading custom IPs from services..."
+    
+    local count=0
+    for service_id in $(jsonfilter -i "$services_file" -e '@.services[*].id'); do
+        enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled")
+        if [ "$enabled" = "true" ]; then
+            # Get custom_ips array for this service
+            custom_ips=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].custom_ips[*]" 2>/dev/null)
+            for ip in $custom_ips; do
+                case "$ip" in
+                    \#*|""|null) continue ;;
+                esac
+                ip_clean=$(echo "$ip" | tr -d '\r' | xargs)
+                
+                # Basic validation and fixing for /24 CIDR
+                if echo "$ip_clean" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/24$'; then
+                    local base_ip=$(echo "$ip_clean" | cut -d'.' -f1-3)
+                    local last_octet=$(echo "$ip_clean" | cut -d'.' -f4 | cut -d'/' -f1)
+                    local cidr_suffix=$(echo "$ip_clean" | cut -d'/' -f2)
+                    
+                    if [ "$last_octet" != "0" ]; then
+                        local fixed_ip="${base_ip}.0/${cidr_suffix}"
+                        log "Fixed IP format: $ip_clean -> $fixed_ip"
+                        ip_clean="$fixed_ip"
+                    fi
+                fi
+                
+                if [ -n "$ip_clean" ]; then
+                    if nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null; then
+                        count=$((count + 1))
+                    fi
+                fi
+            done
+        fi
+    done
+    
+    [ $count -gt 0 ] && log "Added $count custom IPs/ranges to tunnel_nets from services"
+}
+
 # Load IPs from enabled custom services directly into nft set
 load_custom_service_ips() {
     if [ ! -f "$CUSTOM_FILE" ]; then
@@ -227,6 +279,36 @@ EOF
         done
     fi
     
+    # Add custom domains from services.json (user-added)
+    if [ -f "$services_file" ] && command -v jsonfilter >/dev/null 2>&1; then
+        for service_id in $(jsonfilter -i "$services_file" -e '@.services[*].id'); do
+            enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled")
+            if [ "$enabled" = "true" ]; then
+                # Get custom_domains array for this service
+                custom_domains=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].custom_domains[*]" 2>/dev/null)
+                for domain in $custom_domains; do
+                    case "$domain" in
+                        \#*|""|null) continue ;;
+                    esac
+                    d_clean=$(echo "$domain" | tr -d '\r' | xargs)
+                    if [ -n "$d_clean" ]; then
+                        echo "nftset=/$d_clean/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                        # Add www. version
+                        case "$d_clean" in
+                            www.*) 
+                                base_domain="${d_clean#www.}"
+                                [ -n "$base_domain" ] && echo "nftset=/$base_domain/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                                ;;
+                            *)
+                                echo "nftset=/www.$d_clean/4#inet#pinpoint#tunnel_ips" >> "$output_file"
+                                ;;
+                        esac
+                    fi
+                done
+            fi
+        done
+    fi
+    
     log "dnsmasq config generated: $output_file"
 }
 
@@ -240,6 +322,9 @@ reload_all() {
     
     # Load service IP lists
     load_service_lists
+    
+    # Load custom IPs from services (user-added)
+    load_service_custom_ips
     
     # Load IPs from custom services
     load_custom_service_ips

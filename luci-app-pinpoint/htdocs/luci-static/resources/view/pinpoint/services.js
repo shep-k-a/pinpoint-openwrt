@@ -48,6 +48,90 @@ function updateProgress(percent, status) {
 	}
 }
 
+// Show edit service modal
+function showEditServiceModal(service, onSave) {
+	// Merge custom and original domains/IPs
+	var allDomains = (service.domains || []).concat(service.custom_domains || []);
+	var allIps = (service.ips || []).concat(service.custom_ips || []);
+	
+	var domainsText = E('textarea', {
+		'id': 'edit-service-domains',
+		'class': 'cbi-input-textarea',
+		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px;',
+		'placeholder': 'Один домен на строку\nПример:\nyoutube.com\nytimg.com'
+	}, allDomains.join('\n'));
+	
+	var ipsText = E('textarea', {
+		'id': 'edit-service-ips',
+		'class': 'cbi-input-textarea',
+		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px;',
+		'placeholder': 'Один IP/CIDR на строку\nПример:\n8.8.8.8\n8.8.4.0/24\n172.217.0.0/16'
+	}, allIps.join('\n'));
+	
+	var modalContent = E('div', { 'style': 'width: 600px; max-width: 90vw;' }, [
+		E('h3', { 'style': 'margin-top: 0;' }, 'Редактировать: ' + service.name),
+		E('p', { 'style': 'margin: 10px 0; color: #666; font-size: 13px;' }, [
+			E('strong', {}, 'Домены и IP из источников:'),
+			' ' + ((service.domains || []).length || 0) + ' доменов, ' + ((service.ips || []).length || 0) + ' IP',
+			E('br'),
+			E('strong', {}, 'Ваши дополнения:'),
+			' ' + ((service.custom_domains || []).length || 0) + ' доменов, ' + ((service.custom_ips || []).length || 0) + ' IP'
+		]),
+		E('div', { 'style': 'margin: 15px 0;' }, [
+			E('label', { 'style': 'display: block; margin-bottom: 5px; font-weight: bold;' }, 'Домены:'),
+			domainsText,
+			E('small', { 'style': 'color: #666; display: block; margin-top: 5px;' }, 
+				'Домены из источников отображаются серым (только для просмотра). Вы можете добавить свои домены.')
+		]),
+		E('div', { 'style': 'margin: 15px 0;' }, [
+			E('label', { 'style': 'display: block; margin-bottom: 5px; font-weight: bold;' }, 'IP адреса и подсети:'),
+			ipsText,
+			E('small', { 'style': 'color: #666; display: block; margin-top: 5px;' }, 
+				'IP из источников отображаются серым. Вы можете добавить свои IP/CIDR.')
+		]),
+		E('div', { 'style': 'margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;' }, [
+			E('button', {
+				'class': 'btn cbi-button cbi-button-neutral',
+				'click': function() {
+					ui.hideModal();
+				}
+			}, 'Отмена'),
+			E('button', {
+				'class': 'btn cbi-button cbi-button-positive',
+				'click': function() {
+					var domainsVal = document.getElementById('edit-service-domains').value;
+					var ipsVal = document.getElementById('edit-service-ips').value;
+					
+					// Parse inputs
+					var newDomains = domainsVal.split('\n')
+						.map(function(d) { return d.trim(); })
+						.filter(function(d) { return d.length > 0; });
+					
+					var newIps = ipsVal.split('\n')
+						.map(function(ip) { return ip.trim(); })
+						.filter(function(ip) { return ip.length > 0; });
+					
+					// Extract only custom (new) entries
+					var customDomains = newDomains.filter(function(d) {
+						return (service.domains || []).indexOf(d) === -1;
+					});
+					
+					var customIps = newIps.filter(function(ip) {
+						return (service.ips || []).indexOf(ip) === -1;
+					});
+					
+					ui.hideModal();
+					if (onSave) {
+						onSave(customDomains, customIps);
+					}
+				}
+			}, 'Сохранить')
+		])
+	]);
+	
+	ui.showModal('Редактировать сервис', modalContent);
+}
+
 var callGetServices = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'services',
@@ -58,6 +142,13 @@ var callSetService = rpc.declare({
 	object: 'luci.pinpoint',
 	method: 'set_service',
 	params: ['id', 'enabled'],
+	expect: { }
+});
+
+var callEditService = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'edit_service',
+	params: ['id', 'custom_domains', 'custom_ips'],
 	expect: { }
 });
 
@@ -367,17 +458,23 @@ return view.extend({
 				E('div', { 'class': 'cbi-section-node' })
 			]);
 			
-			var table = E('div', { 'class': 'table cbi-section-table' }, [
-				E('div', { 'class': 'tr table-titles' }, [
-					E('div', { 'class': 'th' }, 'Сервис'),
-					E('div', { 'class': 'th' }, 'Домены'),
-					E('div', { 'class': 'th', 'style': 'width:150px' }, 'Через'),
-					E('div', { 'class': 'th', 'style': 'width:80px' }, 'Статус')
-				])
-			]);
+		var table = E('div', { 'class': 'table cbi-section-table' }, [
+			E('div', { 'class': 'tr table-titles' }, [
+				E('div', { 'class': 'th' }, 'Сервис'),
+				E('div', { 'class': 'th' }, 'Домены'),
+				E('div', { 'class': 'th' }, 'IP'),
+				E('div', { 'class': 'th', 'style': 'width:150px' }, 'Через'),
+				E('div', { 'class': 'th', 'style': 'width:80px' }, 'Статус'),
+				E('div', { 'class': 'th', 'style': 'width:100px' }, 'Действия')
+			])
+		]);
 			
 			catServices.forEach(function(service) {
 				var currentRoute = routeMap[service.id] || '';
+				
+				// Count total domains and IPs (including custom)
+				var totalDomains = (service.domains || []).length + (service.custom_domains || []).length;
+				var totalIps = (service.ips || []).length + (service.custom_ips || []).length;
 				
 				var row = E('div', { 
 					'class': 'tr',
@@ -391,9 +488,21 @@ return view.extend({
 					]),
 					E('div', { 'class': 'td' }, [
 						E('small', {}, 
-							(service.domains || []).slice(0, 3).join(', ') + 
-							((service.domains || []).length > 3 ? ' +' + ((service.domains || []).length - 3) : '')
-						)
+							(service.domains || []).slice(0, 2).join(', ') + 
+							(totalDomains > 2 ? ' +' + (totalDomains - 2) : '')
+						),
+						(service.custom_domains || []).length > 0 ? 
+							E('span', { 'style': 'color: #10b981; font-weight: bold; margin-left: 5px;' }, 
+								'+' + (service.custom_domains || []).length) : ''
+					]),
+					E('div', { 'class': 'td' }, [
+						E('small', {}, 
+							(service.ips || []).slice(0, 2).join(', ') + 
+							(totalIps > 2 ? ' +' + (totalIps - 2) : '')
+						),
+						(service.custom_ips || []).length > 0 ? 
+							E('span', { 'style': 'color: #10b981; font-weight: bold; margin-left: 5px;' }, 
+								'+' + (service.custom_ips || []).length) : ''
 					]),
 					E('div', { 'class': 'td' }, [
 						E('select', {
@@ -455,6 +564,30 @@ return view.extend({
 								});
 							})
 						}, service.enabled ? 'ВКЛ' : 'ВЫКЛ')
+					]),
+					E('div', { 'class': 'td' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-action',
+							'style': 'font-size: 11px; padding: 3px 8px;',
+							'click': ui.createHandlerFn(self, function(ev) {
+								showEditServiceModal(service, function(customDomains, customIps) {
+									// Save custom domains and IPs
+									callEditService(service.id, customDomains, customIps).then(function(result) {
+										if (result.success) {
+											ui.addNotification(null, E('p', 'Сервис обновлён'), 'success');
+											// Reload page to reflect changes
+											setTimeout(function() {
+												window.location.reload();
+											}, 1000);
+										} else {
+											ui.addNotification(null, E('p', result.error || 'Ошибка сохранения'), 'danger');
+										}
+									}).catch(function(e) {
+										ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
+									});
+								});
+							})
+						}, '✎ Редактировать')
 					])
 				]);
 				

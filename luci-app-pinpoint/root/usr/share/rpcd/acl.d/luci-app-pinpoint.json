@@ -43,6 +43,7 @@
 			"ubus": {
 				"luci.pinpoint": [
 					"set_service",
+					"edit_service",
 					"set_device",
 					"apply",
 					"restart",
