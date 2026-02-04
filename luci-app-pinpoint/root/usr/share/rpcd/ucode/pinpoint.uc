@@ -511,14 +511,20 @@ function parse_vpn_link(link) {
 
 // Get VPN status
 function get_status() {
+	// Check if we have Python (Full mode) or shell-only (Lite mode)
+	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
+	let is_full_mode = (has_python && trim(has_python) == 'yes');
+	
 	// Check if tun1 is up
 	let tun_up = (stat('/sys/class/net/tun1') != null);
 	
-	// Check sing-box process
+	// Check sing-box process (only relevant in Full mode)
 	let singbox_running = false;
-	let ps_out = run_cmd('pgrep sing-box');
-	if (ps_out && trim(ps_out) != '') {
-		singbox_running = true;
+	if (is_full_mode) {
+		let ps_out = run_cmd('pgrep sing-box');
+		if (ps_out && trim(ps_out) != '') {
+			singbox_running = true;
+		}
 	}
 	
 	// Check https-dns-proxy (DoH)
@@ -549,6 +555,13 @@ function get_status() {
 		ips = length(split(ips_out, ','));
 	}
 	
+	// Check if routing is active (nftables rules exist)
+	let routing_active = false;
+	let nft_check = run_cmd('nft list table inet pinpoint 2>/dev/null');
+	if (nft_check && length(trim(nft_check)) > 0) {
+		routing_active = true;
+	}
+	
 	// Count enabled services
 	let services_data = read_json(SERVICES_FILE);
 	let enabled_services = 0;
@@ -561,11 +574,17 @@ function get_status() {
 	// Read status file for last update
 	let status_data = read_json(DATA_DIR + '/status.json') || {};
 	
+	// In Full mode: VPN active if tun1 is up AND sing-box is running
+	// In Lite mode: always false (no VPN, just routing)
+	let vpn_active = is_full_mode ? (tun_up && singbox_running) : false;
+	
 	return {
 		tunnel_up: tun_up,
 		singbox_running: singbox_running,
 		doh_running: doh_running,
-		vpn_active: tun_up && singbox_running,
+		vpn_active: vpn_active,
+		routing_active: routing_active,
+		is_lite_mode: !is_full_mode,
 		stats: {
 			packets: packets,
 			bytes: bytes,

@@ -42,34 +42,55 @@ return view.extend({
 	},
 
 	render: function(status) {
-		var statusClass = status.vpn_active ? 'success' : 'danger';
-		var statusText = status.vpn_active ? _('VPN Active') : _('VPN Inactive');
+		// In Lite mode: show routing status instead of VPN status
+		var isLiteMode = status.is_lite_mode || false;
+		
+		var statusClass, statusText;
+		if (isLiteMode) {
+			// Lite mode: check if routing is active
+			statusClass = status.routing_active ? 'success' : 'warning';
+			statusText = status.routing_active ? _('Routing Active') : _('Routing Inactive');
+		} else {
+			// Full mode: check if VPN is active
+			statusClass = status.vpn_active ? 'success' : 'danger';
+			statusText = status.vpn_active ? _('VPN Active') : _('VPN Inactive');
+		}
 		
 		var view = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('PinPoint Status')),
+			
+			// Mode indicator
+			isLiteMode ? E('p', { 'style': 'color: #666; font-size: 14px; margin-bottom: 10px;' }, [
+				E('strong', {}, _('Mode: ')),
+				_('Lite (Policy Routing Only - No VPN Tunnels)')
+			]) : E('p', { 'style': 'color: #666; font-size: 14px; margin-bottom: 10px;' }, [
+				E('strong', {}, _('Mode: ')),
+				_('Full (VPN Tunnels + Policy Routing)')
+			]),
 			
 			// Status card
 			E('div', { 'class': 'cbi-section' }, [
 				E('div', { 'class': 'cbi-section-node' }, [
 					E('div', { 'class': 'table' }, [
 						E('div', { 'class': 'tr' }, [
-							E('div', { 'class': 'td left', 'style': 'width:200px' }, _('VPN Status')),
+							E('div', { 'class': 'td left', 'style': 'width:200px' }, isLiteMode ? _('Routing Status') : _('VPN Status')),
 							E('div', { 'class': 'td left' }, [
 								E('span', { 
 									'class': 'badge ' + statusClass,
 									'style': 'padding: 5px 10px; border-radius: 4px; background: ' + 
-										(status.vpn_active ? '#28a745' : '#dc3545') + '; color: white;'
+										(statusClass === 'success' ? '#28a745' : statusClass === 'warning' ? '#ffc107' : '#dc3545') + '; color: white;'
 								}, statusText)
 							])
 						]),
-						E('div', { 'class': 'tr' }, [
+						// Only show tunnel and sing-box status in Full mode
+						!isLiteMode ? E('div', { 'class': 'tr' }, [
 							E('div', { 'class': 'td left' }, _('Tunnel Interface')),
 							E('div', { 'class': 'td left' }, status.tunnel_up ? 'tun1 ✓' : 'tun1 ✗')
-						]),
-						E('div', { 'class': 'tr' }, [
+						]) : null,
+						!isLiteMode ? E('div', { 'class': 'tr' }, [
 							E('div', { 'class': 'td left' }, _('Sing-box')),
 							E('div', { 'class': 'td left' }, status.singbox_running ? _('Running') : _('Stopped'))
-						]),
+						]) : null,
 						E('div', { 'class': 'tr' }, [
 							E('div', { 'class': 'td left' }, _('DNS over HTTPS')),
 							E('div', { 'class': 'td left' }, [
@@ -133,7 +154,8 @@ return view.extend({
 							})
 						}, _('Apply Rules')),
 						
-						E('button', {
+						// Only show Restart button in Full mode
+						!isLiteMode ? E('button', {
 							'class': 'btn cbi-button cbi-button-action',
 							'click': ui.createHandlerFn(this, function() {
 								return callPinpointRestart().then(function(result) {
@@ -142,7 +164,7 @@ return view.extend({
 									ui.addNotification(null, E('p', _('Failed to restart: ') + e.message), 'danger');
 								});
 							})
-						}, _('Restart VPN'))
+						}, _('Restart VPN')) : null
 					])
 				])
 			])
