@@ -1976,21 +1976,22 @@ function get_network_hosts() {
 				let mac = parts[3];
 				let interface = parts[5] || '';
 				
-				// Filter: only LAN IPs from LAN interface (br-lan), exclude gateway and router itself
-				// Check if IP is in same subnet as LAN IP (first 3 octets match for /24)
-				let ip_parts = split(ip, /\./);
-				let lan_parts = split(lan_ip, /\./);
-				let is_lan = (length(lan_parts) >= 3 && length(ip_parts) >= 3 &&
-				              lan_parts[0] == ip_parts[0] && 
-				              lan_parts[1] == ip_parts[1] && 
-				              lan_parts[2] == ip_parts[2]);
-				
-				// Also check interface - only br-lan or lan (exclude wan)
+				// Filter: only devices from LAN interface (br-lan or lan), exclude WAN interface
+				// This is the primary filter - devices from WAN interface should never be shown
 				let is_lan_interface = (interface == 'br-lan' || interface == 'lan');
 				
+				// Also check if IP is in same subnet as LAN IP (additional safety check)
+				let ip_parts = split(ip, /\./);
+				let lan_parts = split(lan_ip, /\./);
+				let is_lan_subnet = (length(lan_parts) >= 3 && length(ip_parts) >= 3 &&
+				                      lan_parts[0] == ip_parts[0] && 
+				                      lan_parts[1] == ip_parts[1] && 
+				                      lan_parts[2] == ip_parts[2]);
+				
+				// Only include if: valid MAC, LAN interface, LAN subnet, not gateway, not router itself
 				if (mac != '00:00:00:00:00:00' && 
-				    is_lan && 
 				    is_lan_interface &&
+				    is_lan_subnet &&
 				    ip != gateway_ip && 
 				    ip != lan_ip && 
 				    !seen[mac]) {
