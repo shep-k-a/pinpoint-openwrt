@@ -662,29 +662,32 @@ function set_service(params) {
 	
 	write_json(SERVICES_FILE, data);
 	
-	// If enabling a service, automatically update its lists
+	// Check if service needs IP list update
+	let needs_update = false;
 	if (enabled) {
 		let ips_file = DATA_DIR + '/lists/' + service_id + '.txt';
 		let ips_stat = stat(ips_file);
-		// Check if file doesn't exist or is empty - trigger update
-		if (!ips_stat || ips_stat.size == 0) {
-			// Update in background (don't block UI)
-			// Try Python first, fallback to shell
-			run_cmd('(/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update-single ' + service_id + ' 2>&1 || /opt/pinpoint/scripts/pinpoint-update.sh update-single ' + service_id + ' 2>&1) >/dev/null 2>&1 &');
-		} else {
-			// Lists exist, just reload nftables/dnsmasq
-			run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 &');
-		}
-	} else {
-		// If disabling, reload rules (will remove service from sets)
-		run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1 &');
+		needs_update = (!ips_stat || ips_stat.size == 0);
+	}
+	
+	// Return immediately (don't block UI)
+	// Background updates are handled by a separate detached process
+	
+	// Launch background update/apply in completely detached process
+	// Using sh -c with nohup to ensure no blocking
+	if (enabled && needs_update) {
+		// Update in background - detached from RPC process
+		system('(nohup sh -c "sleep 1; /opt/pinpoint/scripts/pinpoint-update.sh update-single ' + service_id + ' 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
+	} else if (enabled || !enabled) {
+		// Just reload rules - also detached
+		system('(nohup sh -c "sleep 0.5; /opt/pinpoint/scripts/pinpoint-apply.sh reload 2>&1 | logger -t pinpoint-apply" >/dev/null 2>&1 &) &');
 	}
 	
 	return { 
 		success: true, 
 		id: service_id, 
 		enabled: !!enabled,
-		updating: enabled && (!stat(DATA_DIR + '/lists/' + service_id + '.txt') || stat(DATA_DIR + '/lists/' + service_id + '.txt').size == 0)
+		updating: needs_update
 	};
 }
 
