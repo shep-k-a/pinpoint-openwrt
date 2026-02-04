@@ -1568,21 +1568,21 @@ function update_lists() {
 	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
 	let is_python = (has_python == 'yes\n' || has_python == 'yes');
 	
+	// Start update in background using simple command
 	if (is_python) {
 		// Full mode: use Python script
-		system('(nohup sh -c "/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
+		run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 &');
 		log('Started Python update in background');
 	} else {
 		// Lite mode: use shell script
-		system('(nohup sh -c "/opt/pinpoint/scripts/pinpoint-update.sh update 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
+		run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 &');
 		log('Started shell update in background');
 	}
 	
 	// Return immediately - update runs in background
 	return { 
 		success: true, 
-		message: 'Update started in background. Check logs for progress: logread | grep pinpoint-update',
-		mode: is_python ? 'full' : 'lite'
+		message: 'Update started in background. Check logs for progress: logread | grep pinpoint-update'
 	};
 }
 
