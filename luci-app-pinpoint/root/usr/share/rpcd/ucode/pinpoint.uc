@@ -1553,22 +1553,29 @@ function update_cron_schedule(update_time) {
 
 // Manual update lists (for Lite mode and manual updates)
 function update_lists() {
-	// Try Python first (Full mode), fallback to shell (Lite mode)
-	let python_result = run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update 2>&1');
+	// Launch update in background (non-blocking)
+	// This prevents RPC timeout and allows UI to show progress
 	
-	if (python_result !== null && python_result != '') {
-		// Python script executed (Full mode)
-		return { success: true, output: python_result };
+	// Check if Python is available (Full mode)
+	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
+	let is_python = (has_python == 'yes\n' || has_python == 'yes');
+	
+	if (is_python) {
+		// Full mode: use Python script
+		system('(nohup sh -c "/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
+		log('Started Python update in background');
+	} else {
+		// Lite mode: use shell script
+		system('(nohup sh -c "/opt/pinpoint/scripts/pinpoint-update.sh update 2>&1 | logger -t pinpoint-update" >/dev/null 2>&1 &) &');
+		log('Started shell update in background');
 	}
 	
-	// Fallback to shell script (Lite mode)
-	let shell_result = run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update 2>&1');
-	
-	if (shell_result !== null && shell_result != '') {
-		return { success: true, output: shell_result };
-	}
-	
-	return { success: false, error: 'Update failed - both Python and shell scripts returned no output' };
+	// Return immediately - update runs in background
+	return { 
+		success: true, 
+		message: 'Update started in background. Check logs for progress: logread | grep pinpoint-update',
+		mode: is_python ? 'full' : 'lite'
+	};
 }
 
 // Update single service by ID

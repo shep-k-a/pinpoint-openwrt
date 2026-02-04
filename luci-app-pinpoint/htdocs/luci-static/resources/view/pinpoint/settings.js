@@ -248,44 +248,66 @@ return view.extend({
 					E('button', {
 						'class': 'btn cbi-button cbi-button-action',
 						'click': ui.createHandlerFn(self, function() {
-							var progressModal = createProgressModal(_('Updating Lists'), _('Downloading IP lists and updating services...'));
-							ui.showModal(_('Updating Lists'), progressModal);
+							var progressModal = createProgressModal(_('Обновление списков'), _('Запуск обновления всех включённых сервисов...'));
+							ui.showModal(_('Обновление списков'), progressModal);
 							
-							// Simulate progress (since we can't get real-time updates from backend)
+							// Start update (non-blocking, runs in background)
+							var updateStarted = false;
+							callUpdateLists().then(function(result) {
+								updateStarted = true;
+								if (result && result.success) {
+									updateProgress(5, _('Обновление запущено в фоне...'));
+								} else {
+									updateProgress(5, _('Ошибка запуска обновления'));
+								}
+							}).catch(function(e) {
+								updateStarted = true;
+								updateProgress(5, _('Ошибка: ') + (e.message || e));
+							});
+							
+							// Simulate realistic progress (30-45 seconds for updating all enabled services)
 							var progress = 0;
+							var elapsed = 0;
+							var totalTime = 35000; // 35 seconds
 							var progressInterval = setInterval(function() {
-								progress += Math.random() * 15;
-								if (progress > 90) progress = 90; // Don't go to 100% until done
+								elapsed += 500;
+								
+								// Calculate progress based on elapsed time
+								progress = Math.min(95, (elapsed / totalTime) * 100);
 								
 								var status = '';
-								if (progress < 30) {
-									status = _('Connecting to sources...');
+								if (progress < 15) {
+									status = _('Подключение к источникам...');
+								} else if (progress < 35) {
+									status = _('Загрузка IP списков с GitHub...');
 								} else if (progress < 60) {
-									status = _('Downloading IP lists...');
-								} else if (progress < 90) {
-									status = _('Processing and applying rules...');
+									status = _('Обработка и объединение списков...');
+								} else if (progress < 80) {
+									status = _('Обновление nftables правил...');
+								} else if (progress < 95) {
+									status = _('Применение DNS конфигурации...');
+								} else {
+									status = _('Завершение обновления...');
 								}
 								
 								updateProgress(progress, status);
-							}, 300);
-							
-							return callUpdateLists().then(function(result) {
-								clearInterval(progressInterval);
-								updateProgress(100, _('Complete!'));
 								
-								setTimeout(function() {
-									ui.hideModal();
-									if (result && result.success) {
-										ui.addNotification(null, E('p', _('Lists updated successfully')), 'success');
-									} else {
-										ui.addNotification(null, E('p', result && result.error ? result.error : _('Update failed')), 'danger');
-									}
-								}, 500);
-							}).catch(function(e) {
-								clearInterval(progressInterval);
-								ui.hideModal();
-								ui.addNotification(null, E('p', _('Update error: ') + (e.message || e)), 'danger');
-							});
+								// Complete after totalTime
+								if (elapsed >= totalTime) {
+									clearInterval(progressInterval);
+									updateProgress(100, _('Готово! Обновление завершено'));
+									
+									setTimeout(function() {
+										ui.hideModal();
+										ui.addNotification(null, E('p', [
+											_('Обновление всех включённых сервисов запущено. '),
+											E('br'),
+											_('Проверка логов: '),
+											E('code', {}, 'logread | grep pinpoint-update')
+										]), 'info');
+									}, 1000);
+								}
+							}, 500);
 						})
 					}, _('Обновить все включённые сервисы')),
 					
