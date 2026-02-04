@@ -57,18 +57,18 @@ function showEditServiceModal(service, onSave) {
 	var domainsText = E('textarea', {
 		'id': 'edit-service-domains',
 		'class': 'cbi-input-textarea',
-		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px;',
+		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px; box-sizing: border-box; resize: vertical;',
 		'placeholder': 'Один домен на строку\nПример:\nyoutube.com\nytimg.com'
 	}, allDomains.join('\n'));
 	
 	var ipsText = E('textarea', {
 		'id': 'edit-service-ips',
 		'class': 'cbi-input-textarea',
-		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px;',
+		'style': 'width: 100%; min-height: 150px; font-family: monospace; font-size: 12px; box-sizing: border-box; resize: vertical;',
 		'placeholder': 'Один IP/CIDR на строку\nПример:\n8.8.8.8\n8.8.4.0/24\n172.217.0.0/16'
 	}, allIps.join('\n'));
 	
-	var modalContent = E('div', { 'style': 'width: 600px; max-width: 90vw;' }, [
+	var modalContent = E('div', { 'style': 'width: 600px; max-width: 90vw; padding: 0;' }, [
 		E('h3', { 'style': 'margin-top: 0;' }, 'Редактировать: ' + service.name),
 		E('p', { 'style': 'margin: 10px 0; color: #666; font-size: 13px;' }, [
 			E('strong', {}, 'Домены и IP из источников:'),
@@ -130,6 +130,25 @@ function showEditServiceModal(service, onSave) {
 	]);
 	
 	ui.showModal('Редактировать сервис', modalContent);
+	
+	// Add CSS to fix modal overflow issues
+	if (!document.getElementById('pinpoint-modal-fix')) {
+		var modalStyle = document.createElement('style');
+		modalStyle.id = 'pinpoint-modal-fix';
+		modalStyle.textContent = `
+			.modal-dialog {
+				max-width: 95vw !important;
+				overflow: hidden !important;
+			}
+			.modal-dialog .cbi-input-textarea {
+				box-sizing: border-box !important;
+				width: 100% !important;
+				max-width: 100% !important;
+				resize: vertical !important;
+			}
+		`;
+		document.head.appendChild(modalStyle);
+	}
 }
 
 var callGetServices = rpc.declare({
