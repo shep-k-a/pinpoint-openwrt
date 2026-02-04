@@ -603,84 +603,104 @@ return view.extend({
 										
 										updateProgress(10, _('Изменения сохранены'));
 										
-										// Step 2: Apply rules (takes ~9 seconds) - start in background
-										progress = 10;
-										progressInterval = setInterval(function() {
-											progress += Math.random() * 8;
-											if (progress > 75) progress = 75;
+										// Step 2: Apply rules - REAL progress tracking
+										updateProgress(15, _('Загрузка списков IP...'));
+										
+										// Track real progress with timeout
+										var applyStartTime = Date.now();
+										var applyProgressInterval = setInterval(function() {
+											var elapsed = (Date.now() - applyStartTime) / 1000; // seconds
+											// Estimate progress: 0-30s = 15-50%, 30-60s = 50-75%
+											var estimatedProgress = Math.min(75, 15 + (elapsed / 60) * 60);
 											
 											var status = '';
-											if (progress < 25) {
+											if (elapsed < 10) {
 												status = _('Загрузка списков IP...');
-											} else if (progress < 50) {
+											} else if (elapsed < 25) {
 												status = _('Обновление nftables правил...');
-											} else if (progress < 75) {
+											} else if (elapsed < 50) {
 												status = _('Применение DNS конфигурации...');
+											} else {
+												status = _('Завершение применения правил...');
 											}
-											updateProgress(progress, status);
-										}, 400);
+											updateProgress(estimatedProgress, status);
+										}, 500);
 										
-										// Start apply in background - don't wait for it (prevents timeout)
-										// Rules will apply in background, we just simulate progress
-										var applyCompleted = false;
-										callApply().then(function() {
-											applyCompleted = true;
-											clearInterval(progressInterval);
-											updateProgress(80, _('Правила применены'));
-										}).catch(function(e) {
-											// Timeout or error - rules are still applying in background
-											applyCompleted = true;
-											clearInterval(progressInterval);
-											updateProgress(80, _('Правила применяются (фоном)...'));
-										});
-										
-										// Simulate progress to 80% over ~9 seconds, then continue
-										// This gives realistic feedback without blocking on timeout
-										return new Promise(function(resolve) {
-											var elapsed = 0;
-											var checkInterval = setInterval(function() {
-												elapsed += 500;
-												if (elapsed >= 9000 || applyCompleted) {
-													clearInterval(checkInterval);
-													clearInterval(progressInterval);
-													if (applyCompleted) {
-														updateProgress(80, _('Правила применены'));
-													} else {
-														updateProgress(80, _('Правила применяются...'));
-													}
-													resolve();
-												}
-											}, 500);
-										}).then(function() {
+										// Wait for REAL apply completion (with timeout)
+										return Promise.race([
+											callApply().then(function() {
+												clearInterval(applyProgressInterval);
+												updateProgress(80, _('Правила применены'));
+												return true;
+											}).catch(function(e) {
+												clearInterval(applyProgressInterval);
+												updateProgress(80, _('Правила применены (возможны ошибки)'));
+												return false;
+											}),
+											new Promise(function(resolve) {
+												setTimeout(function() {
+													clearInterval(applyProgressInterval);
+													updateProgress(80, _('Правила применяются (таймаут ожидания)'));
+													resolve(false);
+												}, 60000); // 60 second timeout
+											})
+										]).then(function(applySuccess) {
 											
-											// Step 3: If needs update - trigger background update
+											// Step 3: If needs update - REAL update tracking
 											if (result.needs_update && newState) {
 												updateProgress(85, _('Загрузка IP и доменов с GitHub...'));
 												
-												// Start background update progress simulation
-												var updateProgress_val = 85;
-												var updateInterval = setInterval(function() {
-													updateProgress_val += Math.random() * 2;
-													if (updateProgress_val > 98) updateProgress_val = 98;
-													updateProgress(updateProgress_val, _('Обновление списков (фоном)...'));
-												}, 800);
+												// Track real update progress
+												var updateStartTime = Date.now();
+												var updateProgressInterval = setInterval(function() {
+													var elapsed = (Date.now() - updateStartTime) / 1000; // seconds
+													// Estimate progress: 0-30s = 85-95%, 30-60s = 95-99%
+													var estimatedProgress = Math.min(99, 85 + (elapsed / 60) * 14);
+													
+													var status = '';
+													if (elapsed < 15) {
+														status = _('Подключение к GitHub...');
+													} else if (elapsed < 30) {
+														status = _('Загрузка IP списков...');
+													} else if (elapsed < 45) {
+														status = _('Обработка и сохранение...');
+													} else {
+														status = _('Применение обновлённых правил...');
+													}
+													updateProgress(estimatedProgress, status);
+												}, 500);
 												
-												// Trigger update (don't wait, let it run in background)
-												callUpdateSingleService(serviceId).then(function() {
-													clearInterval(updateInterval);
-													updateProgress(100, _('Готово! Обновление завершено'));
-													setTimeout(function() {
-														ui.hideModal();
-														ui.addNotification(null, E('p', _('Сервис включён, правила применены, IP обновлены')), 'success');
-													}, 800);
-												}).catch(function(e) {
-													clearInterval(updateInterval);
-													updateProgress(100, _('Готово (обновление в фоне)'));
-													setTimeout(function() {
-														ui.hideModal();
-														ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP продолжается в фоне')), 'info');
-													}, 800);
-												});
+												// Wait for REAL update completion (with timeout)
+												return Promise.race([
+													callUpdateSingleService(serviceId).then(function() {
+														clearInterval(updateProgressInterval);
+														updateProgress(100, _('Готово! Обновление завершено'));
+														setTimeout(function() {
+															ui.hideModal();
+															ui.addNotification(null, E('p', _('Сервис включён, правила применены, IP обновлены')), 'success');
+														}, 500);
+														return true;
+													}).catch(function(e) {
+														clearInterval(updateProgressInterval);
+														updateProgress(100, _('Готово (обновление завершено с ошибками)'));
+														setTimeout(function() {
+															ui.hideModal();
+															ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP завершено с ошибками')), 'warning');
+														}, 500);
+														return false;
+													}),
+													new Promise(function(resolve) {
+														setTimeout(function() {
+															clearInterval(updateProgressInterval);
+															updateProgress(100, _('Готово (обновление превысило таймаут)'));
+															setTimeout(function() {
+																ui.hideModal();
+																ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP продолжается в фоне')), 'info');
+															}, 500);
+															resolve(false);
+														}, 120000); // 120 second timeout for update
+													})
+												]);
 											} else {
 												// No update needed - just finish
 												updateProgress(100, _('Готово!'));
