@@ -966,14 +966,10 @@ def generate_singbox_config(tunnels: List[Dict], groups: List[Dict], active_outb
     """Generate complete sing-box config from tunnels, groups, and routing rules"""
     
     # Start with base config
+    # NOTE: DNS removed from sing-box to prevent memory leaks from hanging DNS connections
+    # DNS is handled by dnsmasq + https-dns-proxy instead
     config = {
         "log": {"level": "info"},
-        "dns": {
-            "servers": [
-                {"tag": "google", "address": "8.8.8.8"},
-                {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
-            ]
-        },
         "inbounds": [
             {
                 "type": "tun",
@@ -984,25 +980,12 @@ def generate_singbox_config(tunnels: List[Dict], groups: List[Dict], active_outb
                 "auto_route": False,
                 "sniff": True,
                 "stack": "gvisor"
-            },
-            {
-                "type": "direct",
-                "tag": "dns-in",
-                "listen": "127.0.0.1",
-                "listen_port": 5353,
-                "network": "udp",
-                "override_address": "8.8.8.8",
-                "override_port": 53
             }
         ],
         "outbounds": [
-            {"type": "direct", "tag": "direct-out"},
-            {"type": "dns", "tag": "dns-out"}
+            {"type": "direct", "tag": "direct-out"}
         ],
         "route": {
-            "rules": [
-                {"protocol": "dns", "outbound": "dns-out"}
-            ],
             "auto_detect_interface": True
         }
     }
