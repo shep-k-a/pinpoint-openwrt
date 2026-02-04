@@ -583,48 +583,103 @@ return view.extend({
 								var origText = btn.textContent;
 								btn.textContent = '...';
 								
-							return withLoading(newState ? 'Включение...' : 'Выключение...', 
-								callSetService(serviceId, newState).then(function(result) {
+								// Show progress modal
+								var actionText = newState ? _('Включение сервиса') : _('Выключение сервиса');
+								var progressModal = createProgressModal(actionText, _('Подготовка...'));
+								ui.showModal(actionText, progressModal);
+								
+								var progress = 0;
+								var progressInterval = null;
+								
+								// Step 1: Save service state (instant)
+								updateProgress(5, _('Сохранение изменений...'));
+								
+								return callSetService(serviceId, newState).then(function(result) {
 									if (result.success) {
+										// Update button immediately
 										btn.setAttribute('data-enabled', newState ? '1' : '0');
 										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
 										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
 										
-										// If service needs IP lists update (when enabling without lists)
-										if (result.needs_update && newState) {
-											ui.addNotification(null, E('p', [
-												'Сервис ',
-												E('strong', {}, serviceId),
-												' включён. ',
-												E('br'),
-												'Обновление IP и доменов с GitHub... (может занять до 30 секунд)'
-											]), 'info');
-											// Trigger background update (don't wait for it)
-											callUpdateSingleService(serviceId).catch(function(e) {
-												console.log('Background update error (non-critical):', e);
-											});
-										}
+										updateProgress(10, _('Изменения сохранены'));
 										
-										// Always apply rules after enable/disable (in background)
+										// Step 2: Apply rules (takes ~9 seconds)
+										progress = 10;
+										progressInterval = setInterval(function() {
+											progress += Math.random() * 8;
+											if (progress > 75) progress = 75;
+											
+											var status = '';
+											if (progress < 25) {
+												status = _('Загрузка списков IP...');
+											} else if (progress < 50) {
+												status = _('Обновление nftables правил...');
+											} else if (progress < 75) {
+												status = _('Применение DNS конфигурации...');
+											}
+											updateProgress(progress, status);
+										}, 400);
+										
 										return callApply().then(function() {
-											if (newState) {
-												ui.addNotification(null, E('p', 'Сервис включён и правила применены'), 'success');
+											clearInterval(progressInterval);
+											updateProgress(80, _('Правила применены'));
+											
+											// Step 3: If needs update - trigger background update
+											if (result.needs_update && newState) {
+												updateProgress(85, _('Загрузка IP и доменов с GitHub...'));
+												
+												// Start background update progress simulation
+												var updateProgress_val = 85;
+												var updateInterval = setInterval(function() {
+													updateProgress_val += Math.random() * 2;
+													if (updateProgress_val > 98) updateProgress_val = 98;
+													updateProgress(updateProgress_val, _('Обновление списков (фоном)...'));
+												}, 800);
+												
+												// Trigger update (don't wait, let it run in background)
+												callUpdateSingleService(serviceId).then(function() {
+													clearInterval(updateInterval);
+													updateProgress(100, _('Готово! Обновление завершено'));
+													setTimeout(function() {
+														ui.hideModal();
+														ui.addNotification(null, E('p', _('Сервис включён, правила применены, IP обновлены')), 'success');
+													}, 800);
+												}).catch(function(e) {
+													clearInterval(updateInterval);
+													updateProgress(100, _('Готово (обновление в фоне)'));
+													setTimeout(function() {
+														ui.hideModal();
+														ui.addNotification(null, E('p', _('Сервис включён, правила применены. Обновление IP продолжается в фоне')), 'info');
+													}, 800);
+												});
 											} else {
-												ui.addNotification(null, E('p', 'Сервис выключен и правила обновлены'), 'success');
+												// No update needed - just finish
+												updateProgress(100, _('Готово!'));
+												setTimeout(function() {
+													ui.hideModal();
+													if (newState) {
+														ui.addNotification(null, E('p', _('Сервис включён и правила применены')), 'success');
+													} else {
+														ui.addNotification(null, E('p', _('Сервис выключен и правила обновлены')), 'success');
+													}
+												}, 500);
 											}
 										}).catch(function(e) {
-											ui.addNotification(null, E('p', 'Правила применены, но возможны ошибки: ' + (e.message || e)), 'warning');
+											clearInterval(progressInterval);
+											ui.hideModal();
+											ui.addNotification(null, E('p', _('Ошибка применения правил: ') + (e.message || e)), 'danger');
 										});
 									}
-								})
-							).then(function() {
-								btn.disabled = false;
-								self.updateStats();
-							}).catch(function(e) {
-								ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'danger');
-								btn.disabled = false;
-								btn.textContent = origText;
-							});
+								}).then(function() {
+									btn.disabled = false;
+									self.updateStats();
+								}).catch(function(e) {
+									if (progressInterval) clearInterval(progressInterval);
+									ui.hideModal();
+									ui.addNotification(null, E('p', _('Ошибка: ') + (e.message || e)), 'danger');
+									btn.disabled = false;
+									btn.textContent = origText;
+								});
 							})
 						}, service.enabled ? 'ВКЛ' : 'ВЫКЛ')
 					]),
