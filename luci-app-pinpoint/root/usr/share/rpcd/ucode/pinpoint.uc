@@ -1979,12 +1979,15 @@ function get_network_hosts() {
 				// Filter: ONLY devices from LAN interface (br-lan or lan), exclude WAN interface
 				// Interface check is the primary and most reliable filter
 				// Devices from WAN interface (wan) should NEVER be shown
-				let is_lan_interface = (interface == 'br-lan' || interface == 'lan');
+				// Explicitly exclude 'wan' interface and only allow 'br-lan' or 'lan'
+				let interface_trimmed = trim(interface);
+				let is_lan_interface = (interface_trimmed == 'br-lan' || interface_trimmed == 'lan');
+				let is_wan_interface = (interface_trimmed == 'wan');
 				
-				// Only include if: valid MAC, LAN interface (NOT wan), not gateway, not router itself
-				// We rely on interface check only - if it's on br-lan/lan, it's a LAN device
+				// Only include if: valid MAC, LAN interface (br-lan/lan), NOT WAN, not gateway, not router itself
 				if (mac != '00:00:00:00:00:00' && 
 				    is_lan_interface &&
+				    !is_wan_interface &&
 				    ip != gateway_ip && 
 				    ip != lan_ip && 
 				    !seen[mac]) {
