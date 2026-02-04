@@ -1564,31 +1564,24 @@ function update_lists() {
 	// Launch update in background (non-blocking)
 	// This prevents RPC timeout and allows UI to show progress
 	
-	try {
-		// Check if Python is available (Full mode)
-		let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
-		let is_python = (has_python == 'yes\n' || has_python == 'yes');
-		
-		// Start update in background
-		if (is_python) {
-			// Full mode: use Python script
-			system('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 &');
-		} else {
-			// Lite mode: use shell script
-			system('/opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 &');
-		}
-		
-		// Return immediately - update runs in background
-		return { 
-			success: true, 
-			message: 'Update started in background'
-		};
-	} catch (e) {
-		return {
-			success: false,
-			error: 'Failed to start update: ' + e
-		};
+	// Check if Python is available (Full mode)
+	let has_python = run_cmd('command -v python3 >/dev/null 2>&1 && echo yes');
+	let is_python = (has_python == 'yes\n' || has_python == 'yes');
+	
+	// Start update in background using run_cmd with & (works in ucode)
+	if (is_python) {
+		// Full mode: use Python script
+		run_cmd('/usr/bin/python3 /opt/pinpoint/scripts/pinpoint-update.py update >/dev/null 2>&1 &');
+	} else {
+		// Lite mode: use shell script
+		run_cmd('/opt/pinpoint/scripts/pinpoint-update.sh update >/dev/null 2>&1 &');
 	}
+	
+	// Return immediately - update runs in background
+	return { 
+		success: true, 
+		message: 'Update started in background'
+	};
 }
 
 // Update single service by ID
