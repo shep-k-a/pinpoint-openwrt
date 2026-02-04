@@ -721,13 +721,76 @@ function edit_service(params) {
 	return { success: true, id: service_id };
 }
 
+// Check if IP is in LAN subnet
+function is_lan_ip(ip) {
+	if (!ip || ip == '') return false;
+	
+	// Get LAN interface IP and netmask
+	let lan_ip = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+	if (!lan_ip || lan_ip == '') {
+		// Try lan interface
+		lan_ip = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+	}
+	
+	if (!lan_ip || lan_ip == '') {
+		// Fallback: try UCI
+		lan_ip = run_cmd("uci get network.lan.ipaddr 2>/dev/null");
+	}
+	
+	lan_ip = trim(lan_ip);
+	if (!lan_ip || lan_ip == '') return true; // If can't determine, allow all
+	
+	// Get netmask
+	let netmask = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f2");
+	if (!netmask || netmask == '') {
+		netmask = run_cmd("uci get network.lan.netmask 2>/dev/null");
+	}
+	
+	netmask = trim(netmask);
+	
+	// Simple check: if IP starts with same first 3 octets as LAN IP, it's in LAN
+	// This works for /24 networks (most common)
+	let lan_parts = split(lan_ip, /\./);
+	let ip_parts = split(ip, /\./);
+	
+	if (length(lan_parts) >= 3 && length(ip_parts) >= 3) {
+		// Check first 3 octets match (for /24 subnet)
+		if (lan_parts[0] == ip_parts[0] && 
+		    lan_parts[1] == ip_parts[1] && 
+		    lan_parts[2] == ip_parts[2]) {
+			return true;
+		}
+	}
+	
+	return false;
+}
+
 // Get all devices
 function get_devices() {
 	let data = read_json(DEVICES_FILE);
 	if (!data) {
 		return { devices: [] };
 	}
-	return { devices: data.devices || [] };
+	
+	let all_devices = data.devices || [];
+	let filtered_devices = [];
+	
+	// Filter devices: only show LAN devices
+	for (let i = 0; i < length(all_devices); i++) {
+		let device = all_devices[i];
+		let ip = device.ip;
+		
+		// If device has IP, check if it's in LAN
+		if (ip && is_lan_ip(ip)) {
+			push(filtered_devices, device);
+		} else if (!ip) {
+			// If no IP, include it (might be configured by MAC only)
+			push(filtered_devices, device);
+		}
+		// Otherwise exclude (not in LAN)
+	}
+	
+	return { devices: filtered_devices };
 }
 
 // Update device settings
@@ -1858,7 +1921,21 @@ function get_network_hosts() {
 	let hosts = [];
 	let seen = {};
 	
-	// Read DHCP leases
+	// Get gateway IP (router itself) to exclude
+	let gateway_ip = run_cmd("ip route | grep default | awk '{print $3}' | head -1");
+	gateway_ip = trim(gateway_ip);
+	
+	// Get LAN IP to determine subnet
+	let lan_ip = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+	if (!lan_ip || lan_ip == '') {
+		lan_ip = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+	}
+	if (!lan_ip || lan_ip == '') {
+		lan_ip = run_cmd("uci get network.lan.ipaddr 2>/dev/null");
+	}
+	lan_ip = trim(lan_ip);
+	
+	// Read DHCP leases (these are always in LAN)
 	let leases = readfile('/tmp/dhcp.leases');
 	if (leases) {
 		leases = trim(leases);
@@ -1871,20 +1948,23 @@ function get_network_hosts() {
 				let name = parts[3];
 				if (name == '*') name = '';
 				
-				if (!seen[mac]) {
-					push(hosts, {
-						mac: mac,
-						ip: ip,
-						name: name || ip,
-						source: 'dhcp'
-					});
-					seen[mac] = true;
+				// Filter: only LAN IPs, exclude gateway
+				if (is_lan_ip(ip) && ip != gateway_ip && ip != lan_ip) {
+					if (!seen[mac]) {
+						push(hosts, {
+							mac: mac,
+							ip: ip,
+							name: name || ip,
+							source: 'dhcp'
+						});
+						seen[mac] = true;
+					}
 				}
 			}
 		}
 	}
 	
-	// Read ARP table for additional hosts
+	// Read ARP table for additional hosts (filter by LAN subnet)
 	let arp = run_cmd('cat /proc/net/arp 2>/dev/null');
 	if (arp) {
 		arp = trim(arp);
@@ -1895,7 +1975,12 @@ function get_network_hosts() {
 				let ip = parts[0];
 				let mac = parts[3];
 				
-				if (mac != '00:00:00:00:00:00' && !seen[mac]) {
+				// Filter: only LAN IPs, exclude gateway and router itself
+				if (mac != '00:00:00:00:00:00' && 
+				    is_lan_ip(ip) && 
+				    ip != gateway_ip && 
+				    ip != lan_ip && 
+				    !seen[mac]) {
 					push(hosts, {
 						mac: mac,
 						ip: ip,
