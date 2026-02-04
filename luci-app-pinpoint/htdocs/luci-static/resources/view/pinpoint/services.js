@@ -545,23 +545,38 @@ return view.extend({
 								var origText = btn.textContent;
 								btn.textContent = '...';
 								
-								return withLoading(newState ? 'Включение...' : 'Выключение...', 
-									callSetService(serviceId, newState).then(function(result) {
-										if (result.success) {
-											btn.setAttribute('data-enabled', newState ? '1' : '0');
-											btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
-											btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
-											return callApply();
+							return withLoading(newState ? 'Включение...' : 'Выключение...', 
+								callSetService(serviceId, newState).then(function(result) {
+									if (result.success) {
+										btn.setAttribute('data-enabled', newState ? '1' : '0');
+										btn.textContent = newState ? 'ВКЛ' : 'ВЫКЛ';
+										btn.className = 'btn cbi-button ' + (newState ? 'cbi-button-positive' : 'cbi-button-neutral');
+										
+										// If service needs IP lists update, notify user
+										if (result.needs_update) {
+											ui.addNotification(null, E('p', [
+												'Сервис включён. ',
+												E('strong', {}, 'IP списки отсутствуют.'),
+												E('br'),
+												'Перейдите в ',
+												E('a', { 'href': '#', 'click': function() {
+													window.location.href = '/cgi-bin/luci/admin/services/pinpoint/settings';
+												}}, 'Настройки'),
+												' и нажмите "Обновить списки"'
+											]), 'warning');
 										}
-									})
-								).then(function() {
-									btn.disabled = false;
-									self.updateStats();
-								}).catch(function(e) {
-									ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
-									btn.disabled = false;
-									btn.textContent = origText;
-								});
+										
+										return callApply();
+									}
+								})
+							).then(function() {
+								btn.disabled = false;
+								self.updateStats();
+							}).catch(function(e) {
+								ui.addNotification(null, E('p', 'Ошибка: ' + e.message), 'danger');
+								btn.disabled = false;
+								btn.textContent = origText;
+							});
 							})
 						}, service.enabled ? 'ВКЛ' : 'ВЫКЛ')
 					]),

@@ -645,7 +645,25 @@ function set_service(params) {
 	}
 	
 	write_json(SERVICES_FILE, data);
-	return { success: true, id: service_id, enabled: !!enabled };
+	
+	// If enabling a service, check if it has IP lists
+	// If not, trigger update for this service only (background)
+	let needs_update = false;
+	if (enabled) {
+		let ips_file = DATA_DIR + '/lists/' + service_id + '.txt';
+		let ips_stat = stat(ips_file);
+		// Check if file doesn't exist or is empty
+		if (!ips_stat || ips_stat.size == 0) {
+			needs_update = true;
+		}
+	}
+	
+	return { 
+		success: true, 
+		id: service_id, 
+		enabled: !!enabled,
+		needs_update: needs_update
+	};
 }
 
 // Edit service (add custom domains and IPs)
