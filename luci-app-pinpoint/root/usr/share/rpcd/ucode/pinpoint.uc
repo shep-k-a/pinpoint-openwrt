@@ -1964,18 +1964,19 @@ function get_network_hosts() {
 		}
 	}
 	
-	// Read ARP table for additional hosts (filter by LAN subnet)
+	// Read ARP table for additional hosts (filter by LAN subnet and interface)
 	let arp = run_cmd('cat /proc/net/arp 2>/dev/null');
 	if (arp) {
 		arp = trim(arp);
 		let lines = split(arp, '\n');
 		for (let i = 1; i < length(lines); i++) {
 			let parts = split(lines[i], /\s+/);
-			if (length(parts) >= 4) {
+			if (length(parts) >= 6) {
 				let ip = parts[0];
 				let mac = parts[3];
+				let interface = parts[5] || '';
 				
-				// Filter: only LAN IPs, exclude gateway and router itself
+				// Filter: only LAN IPs from LAN interface (br-lan), exclude gateway and router itself
 				// Check if IP is in same subnet as LAN IP (first 3 octets match for /24)
 				let ip_parts = split(ip, /\./);
 				let lan_parts = split(lan_ip, /\./);
@@ -1984,8 +1985,12 @@ function get_network_hosts() {
 				              lan_parts[1] == ip_parts[1] && 
 				              lan_parts[2] == ip_parts[2]);
 				
+				// Also check interface - only br-lan or lan (exclude wan)
+				let is_lan_interface = (interface == 'br-lan' || interface == 'lan');
+				
 				if (mac != '00:00:00:00:00:00' && 
 				    is_lan && 
+				    is_lan_interface &&
 				    ip != gateway_ip && 
 				    ip != lan_ip && 
 				    !seen[mac]) {
