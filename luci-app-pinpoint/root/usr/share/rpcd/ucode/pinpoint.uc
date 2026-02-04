@@ -725,28 +725,20 @@ function edit_service(params) {
 function is_lan_ip(ip) {
 	if (!ip || ip == '') return false;
 	
-	// Get LAN interface IP and netmask
-	let lan_ip = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
-	if (!lan_ip || lan_ip == '') {
+	// Get LAN interface IP
+	let lan_ip_raw = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1 | head -1");
+	if (!lan_ip_raw || trim(lan_ip_raw) == '') {
 		// Try lan interface
-		lan_ip = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+		lan_ip_raw = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1 | head -1");
 	}
 	
-	if (!lan_ip || lan_ip == '') {
+	if (!lan_ip_raw || trim(lan_ip_raw) == '') {
 		// Fallback: try UCI
-		lan_ip = run_cmd("uci get network.lan.ipaddr 2>/dev/null");
+		lan_ip_raw = run_cmd("uci get network.lan.ipaddr 2>/dev/null");
 	}
 	
-	lan_ip = trim(lan_ip);
-	if (!lan_ip || lan_ip == '') return true; // If can't determine, allow all
-	
-	// Get netmask
-	let netmask = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f2");
-	if (!netmask || netmask == '') {
-		netmask = run_cmd("uci get network.lan.netmask 2>/dev/null");
-	}
-	
-	netmask = trim(netmask);
+	let lan_ip = trim(lan_ip_raw);
+	if (!lan_ip || lan_ip == '') return false; // If can't determine, reject (be strict)
 	
 	// Simple check: if IP starts with same first 3 octets as LAN IP, it's in LAN
 	// This works for /24 networks (most common)
@@ -1922,15 +1914,15 @@ function get_network_hosts() {
 	let seen = {};
 	
 	// Get gateway IP (router itself) to exclude
-	let gateway_ip = run_cmd("ip route | grep default | awk '{print $3}' | head -1");
-	gateway_ip = trim(gateway_ip);
+	let gateway_ip_raw = run_cmd("ip route | grep default | awk '{print $3}' | head -1");
+	let gateway_ip = trim(gateway_ip_raw);
 	
 	// Get LAN IP to determine subnet
-	let lan_ip = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
-	if (!lan_ip || lan_ip == '') {
-		lan_ip = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1");
+	let lan_ip = run_cmd("ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1 | head -1");
+	if (!lan_ip || trim(lan_ip) == '') {
+		lan_ip = run_cmd("ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1 | head -1");
 	}
-	if (!lan_ip || lan_ip == '') {
+	if (!lan_ip || trim(lan_ip) == '') {
 		lan_ip = run_cmd("uci get network.lan.ipaddr 2>/dev/null");
 	}
 	lan_ip = trim(lan_ip);
