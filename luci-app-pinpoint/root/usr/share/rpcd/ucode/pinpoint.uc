@@ -574,9 +574,8 @@ function get_status() {
 	// Read status file for last update
 	let status_data = read_json(DATA_DIR + '/status.json') || {};
 	
-	// In Full mode: VPN active if tun1 is up AND sing-box is running
-	// In Lite mode: always false (no VPN, just routing)
-	let vpn_active = is_full_mode ? (tun_up && singbox_running) : false;
+	// Both modes use VPN! Check if tun1 is up AND sing-box is running
+	let vpn_active = tun_up && singbox_running;
 	
 	return {
 		tunnel_up: tun_up,

@@ -2,7 +2,7 @@
 # Pinpoint - Policy Routing Initialization Script
 # This script sets up nftables and policy routing for selective tunneling
 
-# NOTE: Don't use 'set -e' in Lite mode as tun1 may not exist
+set -e
 
 MARK=0x1
 TABLE_ID=100
@@ -22,43 +22,37 @@ detect_mode() {
     fi
 }
 
-# Check if tun interface exists (only for Full mode)
+# Check if tun interface exists
 check_tun() {
     if ! ip link show "$TUN_IFACE" > /dev/null 2>&1; then
-        log "WARNING: Interface $TUN_IFACE not found"
+        log "ERROR: Interface $TUN_IFACE not found. Is sing-box running?"
         return 1
     fi
     log "TUN interface $TUN_IFACE is up"
     return 0
 }
 
-# Setup policy routing rules (only for Full mode with VPN)
+# Setup policy routing rules
 setup_policy_routing() {
-    local MODE=$(detect_mode)
+    log "Setting up policy routing..."
     
     # Clean up any existing rules first
     ip rule del fwmark $MARK lookup $TABLE_ID 2>/dev/null || true
     ip route flush table $TABLE_ID 2>/dev/null || true
     
-    if [ "$MODE" = "full" ]; then
-        log "Setting up policy routing for Full mode (VPN)..."
-        
-        # Add routing table entry to /etc/iproute2/rt_tables if not exists
-        if ! grep -q "^$TABLE_ID" /etc/iproute2/rt_tables 2>/dev/null; then
-            echo "$TABLE_ID pinpoint" >> /etc/iproute2/rt_tables
-        fi
-        
-        # Add policy rule: packets with mark go to table 100
-        # Use priority 50 to ensure it's checked before main table (32766)
-        ip rule add fwmark $MARK lookup $TABLE_ID priority 50
-        
-        # Add default route via tun1 in table 100
-        ip route add default dev $TUN_IFACE table $TABLE_ID
-        
-        log "Policy routing configured: fwmark $MARK -> table $TABLE_ID -> $TUN_IFACE"
-    else
-        log "Lite mode: Policy routing disabled (no VPN, direct routing only)"
+    # Add routing table entry to /etc/iproute2/rt_tables if not exists
+    if ! grep -q "^$TABLE_ID" /etc/iproute2/rt_tables 2>/dev/null; then
+        echo "$TABLE_ID pinpoint" >> /etc/iproute2/rt_tables
     fi
+    
+    # Add policy rule: packets with mark go to table 100
+    # Use priority 50 to ensure it's checked before main table (32766)
+    ip rule add fwmark $MARK lookup $TABLE_ID priority 50
+    
+    # Add default route via tun1 in table 100
+    ip route add default dev $TUN_IFACE table $TABLE_ID
+    
+    log "Policy routing configured: fwmark $MARK -> table $TABLE_ID -> $TUN_IFACE"
 }
 
 # Load nftables rules
@@ -149,19 +143,14 @@ restart_dnsmasq() {
 main() {
     local MODE=$(detect_mode)
     
-    if [ "$MODE" = "full" ]; then
-        log "=== Pinpoint initialization starting (Full mode - VPN + Routing) ==="
-        
-        # In Full mode, tun1 must exist
-        if ! check_tun; then
-            log "ERROR: tun1 not found. Please start sing-box first or check VPN configuration"
-            exit 1
-        fi
-    else
-        log "=== Pinpoint initialization starting (Lite mode - Routing only) ==="
-        
-        # In Lite mode, tun1 is not needed (check but don't fail)
-        check_tun 2>/dev/null || log "INFO: tun1 not present (expected in Lite mode)"
+    log "=== Pinpoint initialization starting (${MODE} mode) ==="
+    
+    # Both modes require tun1 (sing-box VPN)
+    # Difference: Full has Python backend, Lite uses shell scripts
+    if ! check_tun; then
+        log "ERROR: tun1 not found. Please start sing-box first"
+        log "To start sing-box: /etc/init.d/singbox start"
+        exit 1
     fi
     
     setup_nftables

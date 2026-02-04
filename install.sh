@@ -1906,14 +1906,17 @@ install_luci_app() {
     echo -e "${BLUE}Installing LuCI App (Lite Mode)${NC}"
     echo "----------------------------------------"
     
-    # Required packages for lite mode (NO sing-box, NO VPN)
-    step "Installing minimal dependencies..."
+    # Required packages for lite mode (VPN without Python backend)
+    step "Installing dependencies for Lite mode..."
     install_package "curl" "cURL"
     install_package "ca-certificates" "CA certificates"
+    install_package "ca-bundle" "CA bundle"
     
-    # Note: sing-box and kmod-tun are NOT needed in Lite mode
-    # Lite mode only does policy routing without VPN tunnels
+    # sing-box is needed for VPN tunnels (Lite mode ALSO bypasses blocks)
+    install_singbox
+    install_package "kmod-tun" "TUN kernel module"
     
+    # Firewall and routing
     if command -v nft >/dev/null 2>&1; then
         info "nftables - already installed"
     else
@@ -2388,22 +2391,7 @@ main() {
     
     # Branch based on mode
     if [ "$INSTALL_MODE" = "lite" ]; then
-        # Lite installation (no VPN tunnels, only policy routing)
-        
-        # Stop and disable any existing sing-box service (prevents conflicts)
-        if [ -f /etc/init.d/sing-box ]; then
-            step "Stopping and disabling system sing-box (Lite mode doesn't need VPN)..."
-            /etc/init.d/sing-box stop >/dev/null 2>&1 || true
-            /etc/init.d/sing-box disable >/dev/null 2>&1 || true
-            info "System sing-box disabled (Lite mode uses only policy routing)"
-        fi
-        
-        # Remove tun1 if it exists
-        if [ -d /sys/class/net/tun1 ]; then
-            step "Removing existing tun1 interface..."
-            ip link set tun1 down 2>/dev/null || true
-            ip link delete tun1 2>/dev/null || true
-        fi
+        # Lite installation (VPN without Python backend - shell scripts only)
         
         install_luci_app
         create_init_script
