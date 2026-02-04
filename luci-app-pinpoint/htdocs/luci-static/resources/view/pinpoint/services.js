@@ -497,7 +497,8 @@ return view.extend({
 						
 						setTimeout(function() {
 							ui.hideModal();
-						ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
+							ui.addNotification(null, E('p', 'Правила применены успешно'), 'success');
+						}, 500);
 					}).catch(function(e) {
 						clearInterval(progressInterval);
 						ui.hideModal();
