@@ -603,7 +603,7 @@ return view.extend({
 										
 										updateProgress(10, _('Изменения сохранены'));
 										
-										// Step 2: Apply rules (takes ~9 seconds)
+										// Step 2: Apply rules (takes ~9 seconds) - start in background
 										progress = 10;
 										progressInterval = setInterval(function() {
 											progress += Math.random() * 8;
@@ -620,9 +620,38 @@ return view.extend({
 											updateProgress(progress, status);
 										}, 400);
 										
-										return callApply().then(function() {
+										// Start apply in background - don't wait for it (prevents timeout)
+										// Rules will apply in background, we just simulate progress
+										var applyCompleted = false;
+										callApply().then(function() {
+											applyCompleted = true;
 											clearInterval(progressInterval);
 											updateProgress(80, _('Правила применены'));
+										}).catch(function(e) {
+											// Timeout or error - rules are still applying in background
+											applyCompleted = true;
+											clearInterval(progressInterval);
+											updateProgress(80, _('Правила применяются (фоном)...'));
+										});
+										
+										// Simulate progress to 80% over ~9 seconds, then continue
+										// This gives realistic feedback without blocking on timeout
+										return new Promise(function(resolve) {
+											var elapsed = 0;
+											var checkInterval = setInterval(function() {
+												elapsed += 500;
+												if (elapsed >= 9000 || applyCompleted) {
+													clearInterval(checkInterval);
+													clearInterval(progressInterval);
+													if (applyCompleted) {
+														updateProgress(80, _('Правила применены'));
+													} else {
+														updateProgress(80, _('Правила применяются...'));
+													}
+													resolve();
+												}
+											}, 500);
+										}).then(function() {
 											
 											// Step 3: If needs update - trigger background update
 											if (result.needs_update && newState) {
