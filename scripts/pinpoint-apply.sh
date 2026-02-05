@@ -147,10 +147,9 @@ load_service_custom_ips() {
         if [ -n "$ip_clean" ]; then
             # Skip private ranges (nft rules skip them)
             echo "$ip_clean" | grep -qE '^(10\.|127\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' && continue
+            # Add to set (ignore failure if already present from another service list)
             if nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null; then
                 count=$((count + 1))
-            else
-                log "Warning: failed to add custom IP $ip_clean to tunnel_nets"
             fi
         fi
     done < "$tmp_ips"
