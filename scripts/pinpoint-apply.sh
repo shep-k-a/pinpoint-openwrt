@@ -104,7 +104,13 @@ load_service_custom_ips() {
         fi
     done
     
+    local nlines=0
+    [ -f "$tmp_ips" ] && nlines=$(wc -l < "$tmp_ips" 2>/dev/null) || true
+    [ "$nlines" -gt 0 ] 2>/dev/null && log "Custom IPs file: $nlines entries"
+    
     local count=0
+    # Disable set -e for the loop: "read" returns 1 at EOF and would otherwise exit the script
+    set +e
     while read -r ip || [ -n "$ip" ]; do
         case "$ip" in
             \#*|""|null) continue ;;
@@ -138,6 +144,7 @@ load_service_custom_ips() {
             fi
         fi
     done < "$tmp_ips"
+    set -e
     rm -f "$tmp_ips"
     
     [ $count -gt 0 ] && log "Added $count custom IPs/ranges to tunnel_nets from services"
