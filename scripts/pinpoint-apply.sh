@@ -312,9 +312,74 @@ EOF
     log "dnsmasq config generated: $output_file"
 }
 
+# Check if any services are enabled
+has_enabled_services() {
+    local services_file="$DATA_DIR/services.json"
+    local custom_file="$CUSTOM_FILE"
+    
+    # Check regular services
+    if [ -f "$services_file" ] && command -v jsonfilter >/dev/null 2>&1; then
+        for service_id in $(jsonfilter -i "$services_file" -e '@.services[*].id' 2>/dev/null); do
+            enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled" 2>/dev/null)
+            if [ "$enabled" = "true" ]; then
+                return 0  # Found enabled service
+            fi
+        done
+    fi
+    
+    # Check custom services
+    if [ -f "$custom_file" ] && command -v jsonfilter >/dev/null 2>&1; then
+        enabled_custom=$(jsonfilter -i "$custom_file" -e '@.services[@.enabled=true].id' 2>/dev/null)
+        if [ -n "$enabled_custom" ]; then
+            return 0  # Found enabled custom service
+        fi
+    fi
+    
+    return 1  # No enabled services
+}
+
+# Remove all routing rules (when all services disabled)
+remove_all_rules() {
+    log "No enabled services - removing all routing rules..."
+    
+    # Remove dnsmasq config
+    if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
+        rm -f /etc/dnsmasq.d/pinpoint.conf
+        log "Removed dnsmasq config"
+    fi
+    
+    # Remove NFTables table
+    if nft list table inet pinpoint >/dev/null 2>&1; then
+        nft delete table inet pinpoint 2>/dev/null || true
+        log "Removed NFTables table"
+    fi
+    
+    # Remove policy routing rules
+    ip rule del fwmark 0x1 lookup 100 2>/dev/null || true
+    ip rule del fwmark 0x100 lookup 100 2>/dev/null || true
+    ip route flush table 100 2>/dev/null || true
+    
+    # Restart dnsmasq to apply config removal
+    /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+    
+    log "All routing rules removed (no enabled services)"
+}
+
 # Flush and reload all rules
 reload_all() {
     log "Reloading all pinpoint rules..."
+    
+    # Check if any services are enabled
+    if ! has_enabled_services; then
+        remove_all_rules
+        return 0
+    fi
+    
+    # Ensure NFTables table exists (pinpoint-init.sh should create it, but check)
+    if ! nft list table inet pinpoint >/dev/null 2>&1; then
+        log "NFTables table not found - initializing..."
+        /opt/pinpoint/scripts/pinpoint-init.sh start >/dev/null 2>&1 || true
+    fi
     
     # Flush existing sets
     nft flush set inet pinpoint tunnel_ips 2>/dev/null || true
