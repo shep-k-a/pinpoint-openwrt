@@ -40,6 +40,7 @@ logs/
 *.bak
 
 # Development/debug scripts (local only)
+apply_*.py
 check_*.py
 fix_*.py
 debug_*.py
@@ -58,5 +59,7 @@ toggle_*.py
 update_*.py
 simple_*.py
 final_*.py
+*_fix*.py
+*_fix*.sh
 singbox_config_fixed.json
 check.py
