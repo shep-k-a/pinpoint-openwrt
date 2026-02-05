@@ -212,6 +212,13 @@ var callSetServiceRoute = rpc.declare({
 	expect: { }
 });
 
+var callUpdateSingleService = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'update_single_service',
+	params: ['service_id'],
+	expect: { }
+});
+
 // Global loading state
 var isLoading = false;
 
