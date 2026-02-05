@@ -98,30 +98,38 @@ load_service_custom_ips() {
     for service_id in $(jsonfilter -i "$services_file" -e '@.services[*].id'); do
         enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled")
         if [ "$enabled" = "true" ]; then
-            # Get custom_ips array for this service
+            # Get custom_ips (jsonfilter outputs one per line on OpenWrt; normalize to space-separated for portable for-loop)
             custom_ips=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].custom_ips[*]" 2>/dev/null)
-            for ip in $custom_ips; do
+            for ip in $(echo "$custom_ips" | tr -s ' \n\t' ' '); do
                 case "$ip" in
                     \#*|""|null) continue ;;
                 esac
                 ip_clean=$(echo "$ip" | tr -d '\r' | xargs)
+                [ -z "$ip_clean" ] && continue
                 
-                # Basic validation and fixing for /24 CIDR
+                # Single IP without CIDR: add /32 for nft interval set
+                if ! echo "$ip_clean" | grep -q '/'; then
+                    if echo "$ip_clean" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+                        ip_clean="${ip_clean}/32"
+                    fi
+                fi
+                # Fix /24 with wrong host part (e.g. 1.2.3.4/24 -> 1.2.3.0/24)
                 if echo "$ip_clean" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/24$'; then
                     local base_ip=$(echo "$ip_clean" | cut -d'.' -f1-3)
                     local last_octet=$(echo "$ip_clean" | cut -d'.' -f4 | cut -d'/' -f1)
                     local cidr_suffix=$(echo "$ip_clean" | cut -d'/' -f2)
-                    
                     if [ "$last_octet" != "0" ]; then
-                        local fixed_ip="${base_ip}.0/${cidr_suffix}"
-                        log "Fixed IP format: $ip_clean -> $fixed_ip"
-                        ip_clean="$fixed_ip"
+                        ip_clean="${base_ip}.0/${cidr_suffix}"
                     fi
                 fi
                 
                 if [ -n "$ip_clean" ]; then
+                    # Skip private ranges (nft rules skip them, so they would never match)
+                    echo "$ip_clean" | grep -qE '^(10\.|127\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' && continue
                     if nft add element inet pinpoint tunnel_nets { "$ip_clean" } 2>/dev/null; then
                         count=$((count + 1))
+                    else
+                        log "Warning: failed to add custom IP $ip_clean to tunnel_nets"
                     fi
                 fi
             done
