@@ -809,10 +809,22 @@ install_dependencies() {
     
     # Force clients to use router DNS (critical for nftset to work!)
     step "Configuring DHCP to force router DNS..."
+    # Get router's LAN IP dynamically
+    ROUTER_IP=$(ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP=$(ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    fi
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP=$(uci get network.lan.ipaddr 2>/dev/null)
+    fi
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP="192.168.1.1"  # Fallback
+        warn "Could not detect router IP, using fallback: $ROUTER_IP"
+    fi
     uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
-    uci add_list dhcp.lan.dhcp_option='6,192.168.5.1' 2>/dev/null || true
+    uci add_list dhcp.lan.dhcp_option="6,$ROUTER_IP" 2>/dev/null || true
     uci commit dhcp 2>/dev/null || true
-    info "DHCP configured to force clients to use router DNS (192.168.5.1)"
+    info "DHCP configured to force clients to use router DNS ($ROUTER_IP)"
     
     # Enable DNS query logging for debugging
     step "Enabling DNS query logging..."
@@ -2036,10 +2048,22 @@ install_luci_app() {
     
     # Force clients to use router DNS (critical for nftset to work!)
     step "Configuring DHCP to force router DNS..."
+    # Get router's LAN IP dynamically
+    ROUTER_IP=$(ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP=$(ip -4 addr show lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    fi
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP=$(uci get network.lan.ipaddr 2>/dev/null)
+    fi
+    if [ -z "$ROUTER_IP" ]; then
+        ROUTER_IP="192.168.1.1"  # Fallback
+        warn "Could not detect router IP, using fallback: $ROUTER_IP"
+    fi
     uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
-    uci add_list dhcp.lan.dhcp_option='6,192.168.5.1' 2>/dev/null || true
+    uci add_list dhcp.lan.dhcp_option="6,$ROUTER_IP" 2>/dev/null || true
     uci commit dhcp 2>/dev/null || true
-    info "DHCP configured to force clients to use router DNS (192.168.5.1)"
+    info "DHCP configured to force clients to use router DNS ($ROUTER_IP)"
     
     # Enable DNS query logging for debugging
     step "Enabling DNS query logging..."
