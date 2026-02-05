@@ -22,6 +22,18 @@ var callPinpointRestart = rpc.declare({
 	expect: { }
 });
 
+var callPinpointStopRouting = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'stop_routing',
+	expect: { }
+});
+
+var callPinpointStartRouting = rpc.declare({
+	object: 'luci.pinpoint',
+	method: 'start_routing',
+	expect: { }
+});
+
 function formatBytes(bytes) {
 	if (bytes === 0) return '0 B';
 	var k = 1024;
@@ -157,7 +169,35 @@ return view.extend({
 									ui.addNotification(null, E('p', _('Failed to restart: ') + e.message), 'danger');
 								});
 							})
-						}, _('Restart VPN'))
+						}, _('Restart VPN')),
+						
+						// Stop routing button (removes all rules, traffic goes through normal internet)
+						E('button', {
+							'class': 'btn cbi-button cbi-button-negative',
+							'click': ui.createHandlerFn(this, function() {
+								return callPinpointStopRouting().then(function(result) {
+									ui.addNotification(null, E('p', _('Routing stopped - all rules removed, traffic goes through normal internet')), 'success');
+									// Refresh status to show updated state
+									return callPinpointStatus();
+								}).catch(function(e) {
+									ui.addNotification(null, E('p', _('Failed to stop routing: ') + e.message), 'danger');
+								});
+							})
+						}, _('Stop Routing')),
+						
+						// Start routing button (re-applies rules)
+						E('button', {
+							'class': 'btn cbi-button cbi-button-positive',
+							'click': ui.createHandlerFn(this, function() {
+								return callPinpointStartRouting().then(function(result) {
+									ui.addNotification(null, E('p', _('Routing started - rules applied')), 'success');
+									// Refresh status to show updated state
+									return callPinpointStatus();
+								}).catch(function(e) {
+									ui.addNotification(null, E('p', _('Failed to start routing: ') + e.message), 'danger');
+								});
+							})
+						}, _('Start Routing'))
 					])
 				])
 			])

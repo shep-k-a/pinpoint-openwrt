@@ -883,6 +883,37 @@ function restart() {
 	};
 }
 
+// Stop routing (remove all rules, but keep web interface running)
+function stop_routing() {
+	// Call pinpoint-init.sh stop to remove all routing rules
+	let result = run_cmd('/opt/pinpoint/scripts/pinpoint-init.sh stop 2>&1');
+	
+	// Also remove dnsmasq config if it exists
+	run_cmd('rm -f /etc/dnsmasq.d/pinpoint.conf 2>/dev/null');
+	run_cmd('/etc/init.d/dnsmasq restart >/dev/null 2>&1');
+	
+	return {
+		success: true,
+		output: result,
+		message: 'Routing stopped - all rules removed, traffic goes through normal internet'
+	};
+}
+
+// Start routing (re-apply rules)
+function start_routing() {
+	// Call pinpoint-init.sh start to set up routing rules
+	let result = run_cmd('/opt/pinpoint/scripts/pinpoint-init.sh start 2>&1');
+	
+	// Apply current rules
+	run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload >/dev/null 2>&1');
+	
+	return {
+		success: true,
+		output: result,
+		message: 'Routing started - rules applied'
+	};
+}
+
 // Get tunnel/VPN configurations
 function get_tunnels() {
 	// Read sing-box config
@@ -2466,6 +2497,16 @@ const methods = {
 	restart: {
 		call: function() {
 			return restart();
+		}
+	},
+	stop_routing: {
+		call: function() {
+			return stop_routing();
+		}
+	},
+	start_routing: {
+		call: function() {
+			return start_routing();
 		}
 	},
 	tunnels: {
