@@ -1508,16 +1508,13 @@ NFT
             /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
         fi
         
-        # Restore firewall forward policy to ACCEPT (if it was changed)
-        if nft list chain inet fw4 forward >/dev/null 2>&1; then
-            CURRENT_POLICY=$(nft list chain inet fw4 forward 2>/dev/null | grep "policy" | awk '{print $NF}')
-            if [ "$CURRENT_POLICY" = "drop" ]; then
-                log "Restoring firewall forward policy to ACCEPT..."
-                uci set firewall.@defaults[0].forward='ACCEPT' 2>/dev/null || true
-                uci commit firewall 2>/dev/null || true
-                /etc/init.d/firewall reload >/dev/null 2>&1 || true
-            fi
-        fi
+        # Restore firewall forward policy to ACCEPT
+        # This ensures internet works after PinPoint is disabled
+        log "Restoring firewall forward policy to ACCEPT..."
+        uci set firewall.@defaults[0].forward='ACCEPT' 2>/dev/null || true
+        uci commit firewall 2>/dev/null || true
+        /etc/init.d/firewall restart >/dev/null 2>&1 || true
+        sleep 1
         
         log "Routing stopped, settings restored"
         ;;
