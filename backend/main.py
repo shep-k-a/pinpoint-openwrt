@@ -1202,12 +1202,24 @@ async def get_service_status():
 
 @app.post("/api/service/start")
 async def start_services():
-    """Start PinPoint and sing-box services"""
-    results = {"pinpoint": False, "singbox": False}
+    """Start PinPoint and sing-box services, restore routing rules"""
+    results = {"pinpoint": False, "singbox": False, "routing": False}
     
     # Start sing-box first
     success, _ = run_command(["/etc/init.d/sing-box", "start"])
     results["singbox"] = success
+    
+    # Wait for tun1 interface to be created
+    import time
+    time.sleep(2)
+    
+    # Restore routing rules (same as Lite version)
+    success, _ = run_command(["/opt/pinpoint/scripts/pinpoint-init.sh", "start"])
+    results["routing"] = success
+    
+    # Apply current rules
+    if success:
+        run_command(["/opt/pinpoint/scripts/pinpoint-apply.sh", "reload"])
     
     # PinPoint should already be running (we're responding to this request)
     results["pinpoint"] = True
@@ -1216,14 +1228,19 @@ async def start_services():
 
 @app.post("/api/service/stop")
 async def stop_services():
-    """Stop sing-box service (PinPoint will keep running)"""
-    results = {"singbox": False}
+    """Stop sing-box service and remove all routing rules (PinPoint will keep running)"""
+    results = {"singbox": False, "routing": False}
     
     # Stop sing-box
     success, _ = run_command(["/etc/init.d/sing-box", "stop"])
     results["singbox"] = success
     
-    return {"status": "ok", "results": results, "note": "PinPoint keeps running to serve UI"}
+    # Remove all routing rules (same as Lite version)
+    # This ensures traffic goes through normal internet, not VPN
+    success, _ = run_command(["/opt/pinpoint/scripts/pinpoint-init.sh", "stop"])
+    results["routing"] = success
+    
+    return {"status": "ok", "results": results, "note": "PinPoint keeps running to serve UI. All routing rules removed - traffic goes through normal internet."}
 
 @app.post("/api/service/restart")
 async def restart_services():
@@ -1234,11 +1251,17 @@ async def restart_services():
     success, _ = run_command(["/etc/init.d/sing-box", "restart"])
     results["singbox"] = success
     
-    # Re-apply routing
+    # Wait for tun1 interface to be created
     import time
     time.sleep(2)
-    success, _ = run_command(["python3", "/opt/pinpoint/scripts/pinpoint-update.py", "update"])
+    
+    # Re-apply routing rules (same as Lite version)
+    success, _ = run_command(["/opt/pinpoint/scripts/pinpoint-init.sh", "start"])
     results["routing"] = success
+    
+    # Apply current rules
+    if success:
+        run_command(["/opt/pinpoint/scripts/pinpoint-apply.sh", "reload"])
     
     return {"status": "ok", "results": results}
 
