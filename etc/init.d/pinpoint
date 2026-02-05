@@ -10,11 +10,25 @@ PINPOINT_DIR="/opt/pinpoint"
 start_service() {
     logger -t pinpoint "Starting pinpoint service..."
     
-    # Initialize nftables and policy routing
+    # 1) Start sing-box first so tun1 exists before init
+    if [ -f /opt/pinpoint/data/tunnels.json ]; then
+        /etc/init.d/sing-box enable >/dev/null 2>&1 || true
+        /etc/init.d/sing-box start >/dev/null 2>&1 || true
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            ip link show tun1 >/dev/null 2>&1 && break
+            sleep 1
+        done
+    fi
+    
+    # 2) Initialize nftables and policy routing
     /opt/pinpoint/scripts/pinpoint-init.sh start
     
-    # Apply current rules
+    # 3) Apply rules (creates dnsmasq config and loads IPs)
     /opt/pinpoint/scripts/pinpoint-apply.sh reload
+    
+    if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
+        /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+    fi
     
     logger -t pinpoint "Pinpoint service started"
 }

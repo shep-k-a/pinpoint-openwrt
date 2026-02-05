@@ -833,12 +833,11 @@ function set_device_services(params) {
 
 // Apply changes (reload routing rules)
 function apply() {
-	// Run pinpoint-apply.sh reload to apply routing rules
-	// This reloads nftables sets, regenerates dnsmasq config, and restarts dnsmasq
+	// Ensure nftables and policy routing (tun1) are set up first (Lite: needed after subscription add)
+	run_cmd('/opt/pinpoint/scripts/pinpoint-init.sh start 2>/dev/null');
+	// Reload rules: nft sets, dnsmasq pinpoint.conf, restart dnsmasq
 	let result = run_cmd('/opt/pinpoint/scripts/pinpoint-apply.sh reload 2>&1');
 	
-	// Wait a bit for rules to fully apply (dnsmasq restart, nftables reload)
-	// This ensures rules are active before returning
 	run_cmd('sleep 2');
 	
 	return {
@@ -1020,6 +1019,8 @@ function add_subscription(params) {
 	let update_result = update_subscriptions();
 	
 	if (update_result && update_result.success) {
+		// Apply routing so pre-installed services (e.g. Instagram) work immediately
+		apply();
 		return { 
 			success: true, 
 			id: id,
@@ -1217,6 +1218,9 @@ function update_subscriptions() {
 		
 		// Restart sing-box (run in background, don't wait)
 		run_cmd('/etc/init.d/sing-box restart >/dev/null 2>&1 &');
+		run_cmd('sleep 2');
+		// Apply routing so pinpoint.conf and nft sets are created/updated (Lite out-of-the-box)
+		apply();
 		
 		return { 
 			success: true, 

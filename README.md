@@ -37,14 +37,22 @@ Or with curl:
 curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh
 ```
 
+**Lite mode** (LuCI only, no Python backend) for low-memory routers:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shep-k-a/pinpoint-openwrt/master/install.sh | sh -s -- lite
+```
+
 **Note:** Installation optimized for low-RAM devices (256MB+). Python packages are installed from pre-compiled binaries when possible.
 
 The installer will:
 1. Check system compatibility
-2. Install all required dependencies
+2. Install all required dependencies (sing-box, dnsmasq-full, nftables)
 3. Download PinPoint files
-4. Ask you to set a username and password
+4. Ask you to set a username and password (Full) or use LuCI login (Lite)
 5. Create and start the system service
+
+**After adding a VPN subscription (Lite):** Pre-installed services (e.g. Instagram, YouTube) apply automatically. If something doesn't work, open **Services** in LuCI and click **Apply**, or run on the router: `/etc/init.d/pinpoint restart`
 
 ## Access
 
@@ -213,6 +221,23 @@ sing-box check -c /etc/sing-box/config.json
 
 # View logs
 logread | grep sing-box
+```
+
+### Lite: services/Instagram not working after adding subscription
+
+Ensure routing is applied and sing-box is up:
+
+```bash
+/etc/init.d/sing-box start
+sleep 2
+/opt/pinpoint/scripts/pinpoint-init.sh start
+/opt/pinpoint/scripts/pinpoint-apply.sh reload
+```
+
+Or restart the whole PinPoint service:
+
+```bash
+/etc/init.d/pinpoint restart
 ```
 
 ## Contributing

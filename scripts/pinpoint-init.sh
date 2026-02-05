@@ -145,16 +145,15 @@ main() {
     
     log "=== Pinpoint initialization starting (${MODE} mode) ==="
     
-    # Both modes require tun1 (sing-box VPN)
-    # Difference: Full has Python backend, Lite uses shell scripts
-    if ! check_tun; then
-        log "ERROR: tun1 not found. Please start sing-box first"
-        log "To start sing-box: /etc/init.d/singbox start"
-        exit 1
-    fi
-    
+    # Always create nftables table and sets (needed for pinpoint-apply and dnsmasq nftset)
     setup_nftables
-    setup_policy_routing
+    
+    # Policy routing requires tun1 (sing-box). If missing, skip so apply can still run.
+    if check_tun; then
+        setup_policy_routing
+    else
+        log "tun1 not found - skipping policy routing (start sing-box first: /etc/init.d/sing-box start)"
+    fi
     
     # Only restart dnsmasq if pinpoint.conf exists
     if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
