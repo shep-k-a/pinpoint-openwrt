@@ -870,8 +870,10 @@ function restart() {
 	// Restart sing-box
 	let result = run_cmd('/etc/init.d/sing-box restart 2>&1');
 	
-	// Wait a bit and check if it started
-	run_cmd('sleep 2');
+	// Wait for tun1 to come up, then restore policy routing (kernel removes route when tun1 goes down)
+	run_cmd('sleep 3');
+	run_cmd('/opt/pinpoint/scripts/pinpoint-init.sh start 2>/dev/null');
+	
 	let ps_out = run_cmd('pgrep sing-box');
 	let started = (ps_out && trim(ps_out) != '');
 	

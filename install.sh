@@ -1549,16 +1549,18 @@ install_hotplug_scripts() {
     
     step "Installing network hotplug script..."
     
-    # Hotplug for tun1 interface creation
+    # Hotplug for tun1 interface creation (after sing-box start/restart)
     cat > /etc/hotplug.d/net/99-pinpoint << 'HOTPLUGNET'
 #!/bin/sh
-# Reinitialize pinpoint routing when tun1 comes up
-
-[ "$ACTION" = "add" ] && [ "$INTERFACE" = "tun1" ] && {
-    logger -t pinpoint "tun1 interface added, initializing routing..."
-    sleep 1
-    /opt/pinpoint/scripts/pinpoint-init.sh start
-}
+case "$ACTION" in
+    add)
+        if [ "$INTERFACE" = "tun1" ] || [ "$DEVICE" = "tun1" ]; then
+            logger -t pinpoint "tun1 interface added, initializing routing..."
+            sleep 1
+            /opt/pinpoint/scripts/pinpoint-init.sh start
+        fi
+        ;;
+esac
 HOTPLUGNET
 
     chmod +x /etc/hotplug.d/net/99-pinpoint
