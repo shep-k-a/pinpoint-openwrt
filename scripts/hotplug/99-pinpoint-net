@@ -5,9 +5,10 @@
 case "$ACTION" in
     add)
         if [ "$INTERFACE" = "tun1" ] || [ "$DEVICE" = "tun1" ]; then
-            logger -t pinpoint "tun1 interface added, initializing routing..."
+            logger -t pinpoint "tun1 interface added, initializing routing and applying rules..."
             sleep 1
-            /opt/pinpoint/scripts/pinpoint-init.sh start
+            [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+            [ -x /opt/pinpoint/scripts/pinpoint-apply.sh ] && /opt/pinpoint/scripts/pinpoint-apply.sh reload
         fi
         ;;
 esac

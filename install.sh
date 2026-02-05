@@ -1372,13 +1372,16 @@ setup_routing() {
     nft insert rule inet fw4 forward iifname "tun1" accept 2>/dev/null
     nft insert rule inet fw4 forward oifname "tun1" accept 2>/dev/null
     
-    # Run pinpoint-init if exists
+    # Run pinpoint-init and apply rules (so traffic is tunneled after boot/restart)
     [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+    [ -x /opt/pinpoint/scripts/pinpoint-apply.sh ] && /opt/pinpoint/scripts/pinpoint-apply.sh reload
     
     logger -t sing-box "Policy routing configured"
 }
 
 start_service() {
+    # Migrate deprecated inet4_address -> "address" array (sing-box 1.10+)
+    [ -x /opt/pinpoint/scripts/fix-tun-config.sh ] && /opt/pinpoint/scripts/fix-tun-config.sh
     procd_open_instance
     procd_set_param command /usr/bin/sing-box run -c /etc/sing-box/config.json
     procd_set_param env ENABLE_DEPRECATED_TUN_ADDRESS_X=true ENABLE_DEPRECATED_SPECIAL_OUTBOUNDS=true
@@ -1536,6 +1539,19 @@ ROUTESCRIPT
 
     chmod +x "$PINPOINT_DIR/scripts/pinpoint-init.sh"
     
+    step "Creating fix-tun-config.sh..."
+    cat > "$PINPOINT_DIR/scripts/fix-tun-config.sh" << 'FIXTUN'
+#!/bin/sh
+# Migrate sing-box TUN: deprecated inet4_address -> "address" array (1.10+)
+# Idempotent. Run from /etc/init.d/sing-box start.
+CONF="/etc/sing-box/config.json"
+[ ! -f "$CONF" ] && exit 0
+sed -i 's/"inet4_address": "10\.0\.0\.1\/30",/"address": ["10.0.0.1\/30"],/' "$CONF" 2>/dev/null
+sed -i 's/"inet4_address": "10\.0\.0\.1\/30"/"address": ["10.0.0.1\/30"]/' "$CONF" 2>/dev/null
+exit 0
+FIXTUN
+    chmod +x "$PINPOINT_DIR/scripts/fix-tun-config.sh"
+    
     info "Routing scripts created"
 }
 
@@ -1555,9 +1571,10 @@ install_hotplug_scripts() {
 case "$ACTION" in
     add)
         if [ "$INTERFACE" = "tun1" ] || [ "$DEVICE" = "tun1" ]; then
-            logger -t pinpoint "tun1 interface added, initializing routing..."
+            logger -t pinpoint "tun1 interface added, initializing routing and applying rules..."
             sleep 1
-            /opt/pinpoint/scripts/pinpoint-init.sh start
+            [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+            [ -x /opt/pinpoint/scripts/pinpoint-apply.sh ] && /opt/pinpoint/scripts/pinpoint-apply.sh reload
         fi
         ;;
 esac
@@ -1695,26 +1712,8 @@ create_singbox_config() {
     
     mkdir -p /etc/sing-box
     
-    # Detect sing-box version to adapt config format
-    TUN_ADDRESS_FIELD="inet4_address"
-    if command -v sing-box >/dev/null 2>&1; then
-        SB_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-        if [ -n "$SB_VERSION" ]; then
-            # Check if version is < 1.11.0 (uses "address" instead of "inet4_address")
-            VERSION_MAJOR=$(echo "$SB_VERSION" | cut -d. -f1)
-            VERSION_MINOR=$(echo "$SB_VERSION" | cut -d. -f2)
-            if [ "$VERSION_MAJOR" -lt 1 ] || ([ "$VERSION_MAJOR" -eq 1 ] && [ "$VERSION_MINOR" -lt 11 ]); then
-                TUN_ADDRESS_FIELD="address"
-                info "Detected sing-box $SB_VERSION - using legacy 'address' field format"
-            else
-                info "Detected sing-box $SB_VERSION - using modern 'inet4_address' field format"
-            fi
-        fi
-    fi
-    
-    # Create minimal config (will be updated by PinPoint when tunnels are added)
-    if [ "$TUN_ADDRESS_FIELD" = "address" ]; then
-        cat > /etc/sing-box/config.json << 'SBCONFIG'
+    # sing-box 1.10+: use "address" array; inet4_address is deprecated
+    cat > /etc/sing-box/config.json << 'SBCONFIG'
 {
   "log": {"level": "info"},
   "dns": {
@@ -1748,44 +1747,8 @@ create_singbox_config() {
   }
 }
 SBCONFIG
-    else
-        cat > /etc/sing-box/config.json << 'SBCONFIG'
-{
-  "log": {"level": "info"},
-  "dns": {
-    "servers": [
-      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
-      {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
-    ]
-  },
-  "inbounds": [
-    {
-      "type": "tun",
-      "tag": "tun-in",
-      "interface_name": "tun1",
-      "inet4_address": "10.0.0.1/30",
-      "mtu": 1400,
-      "auto_route": false,
-      "sniff": true,
-      "stack": "gvisor"
-    }
-  ],
-  "outbounds": [
-    {"type": "direct", "tag": "direct-out"},
-    {"type": "dns", "tag": "dns-out"}
-  ],
-  "route": {
-    "rules": [
-      {"protocol": "dns", "outbound": "dns-out"}
-    ],
-    "final": "direct-out",
-    "auto_detect_interface": true
-  }
-}
-SBCONFIG
-    fi
 
-    info "sing-box config created (version-aware format, add tunnels via PinPoint UI)"
+    info "sing-box config created (address format 1.10+, add tunnels via PinPoint UI)"
 }
 
 # ============================================
@@ -2148,6 +2111,8 @@ install_luci_app() {
         "/opt/pinpoint/scripts/pinpoint-apply.sh" || warn "Failed to download pinpoint-apply.sh"
     download "$GITHUB_REPO/scripts/pinpoint-update.sh" \
         "/opt/pinpoint/scripts/pinpoint-update.sh" || error "Failed to download pinpoint-update.sh"
+    download "$GITHUB_REPO/scripts/fix-tun-config.sh" \
+        "/opt/pinpoint/scripts/fix-tun-config.sh" || warn "Failed to download fix-tun-config.sh"
     chmod +x /opt/pinpoint/scripts/*.sh 2>/dev/null || true
     # Normalize line endings just in case
     sed -i 's/\r$//' /opt/pinpoint/scripts/*.sh 2>/dev/null || true
@@ -2187,27 +2152,8 @@ install_luci_app() {
     # Create sing-box config if not exists
     if [ ! -f /etc/sing-box/config.json ]; then
         step "Creating default sing-box config..."
-        
-        # Detect sing-box version to adapt config format
-        TUN_ADDRESS_FIELD="inet4_address"
-        if command -v sing-box >/dev/null 2>&1; then
-            SB_VERSION=$(sing-box version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-            if [ -n "$SB_VERSION" ]; then
-                # Check if version is < 1.11.0 (uses "address" instead of "inet4_address")
-                VERSION_MAJOR=$(echo "$SB_VERSION" | cut -d. -f1)
-                VERSION_MINOR=$(echo "$SB_VERSION" | cut -d. -f2)
-                if [ "$VERSION_MAJOR" -lt 1 ] || ([ "$VERSION_MAJOR" -eq 1 ] && [ "$VERSION_MINOR" -lt 11 ]); then
-                    TUN_ADDRESS_FIELD="address"
-                    info "Detected sing-box $SB_VERSION - using legacy 'address' field format"
-                else
-                    info "Detected sing-box $SB_VERSION - using modern 'inet4_address' field format"
-                fi
-            fi
-        fi
-        
-        # Generate config based on version
-        if [ "$TUN_ADDRESS_FIELD" = "address" ]; then
-            cat > /etc/sing-box/config.json << 'SBCFG'
+        # sing-box 1.10+: use "address" array; inet4_address is deprecated
+        cat > /etc/sing-box/config.json << 'SBCFG'
 {
   "log": {"level": "info"},
   "dns": {
@@ -2239,41 +2185,7 @@ install_luci_app() {
   }
 }
 SBCFG
-        else
-            cat > /etc/sing-box/config.json << 'SBCFG'
-{
-  "log": {"level": "info"},
-  "dns": {
-    "servers": [
-      {"tag": "google", "address": "8.8.8.8", "detour": "direct-out"},
-      {"tag": "local", "address": "127.0.0.1", "detour": "direct-out"}
-    ]
-  },
-  "inbounds": [
-    {
-      "type": "tun",
-      "tag": "tun-in",
-      "interface_name": "tun1",
-      "inet4_address": "10.0.0.1/30",
-      "mtu": 1400,
-      "auto_route": false,
-      "sniff": true,
-      "stack": "gvisor"
-    }
-  ],
-  "outbounds": [
-    {"type": "direct", "tag": "direct-out"},
-    {"type": "dns", "tag": "dns-out"}
-  ],
-  "route": {
-    "rules": [{"protocol": "dns", "outbound": "dns-out"}],
-    "final": "direct-out",
-    "auto_detect_interface": true
-  }
-}
-SBCFG
-        fi
-        info "sing-box config created (version-aware format)"
+        info "sing-box config created (address format 1.10+)"
     fi
     
     # Create sing-box init script
@@ -2304,13 +2216,16 @@ setup_routing() {
     nft insert rule inet fw4 forward iifname "tun1" accept 2>/dev/null
     nft insert rule inet fw4 forward oifname "tun1" accept 2>/dev/null
     
-    # Run pinpoint-init if exists
+    # Run pinpoint-init and apply rules (so traffic is tunneled after boot/restart)
     [ -x /opt/pinpoint/scripts/pinpoint-init.sh ] && /opt/pinpoint/scripts/pinpoint-init.sh start
+    [ -x /opt/pinpoint/scripts/pinpoint-apply.sh ] && /opt/pinpoint/scripts/pinpoint-apply.sh reload
     
     logger -t sing-box "Policy routing configured"
 }
 
 start_service() {
+    # Migrate deprecated inet4_address -> "address" array (sing-box 1.10+)
+    [ -x /opt/pinpoint/scripts/fix-tun-config.sh ] && /opt/pinpoint/scripts/fix-tun-config.sh
     procd_open_instance
     procd_set_param command /usr/bin/sing-box run -c /etc/sing-box/config.json
     procd_set_param env ENABLE_DEPRECATED_TUN_ADDRESS_X=true ENABLE_DEPRECATED_SPECIAL_OUTBOUNDS=true

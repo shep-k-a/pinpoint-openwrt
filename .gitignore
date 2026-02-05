@@ -39,6 +39,10 @@ logs/
 *.tmp
 *.bak
 
+# One-off / local docs
+SUMMARY_RU.md
+docs/ROUTER_DIAGNOSTICS.md
+
 # Development/debug scripts (local only)
 apply_*.py
 check_*.py

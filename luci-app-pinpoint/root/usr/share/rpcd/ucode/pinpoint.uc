@@ -64,14 +64,18 @@ function clean_config_outbounds(config) {
 				push(cleaned[key], clean_outbound(ob));
 			}
 		} else if (key == 'inbounds' && config.inbounds) {
-			// Migrate TUN legacy "address" to "inet4_address" (sing-box 1.10+)
+			// Migrate TUN: inet4_address (deprecated) -> "address" array (1.10+)
 			cleaned.inbounds = [];
 			for (let i = 0; i < length(config.inbounds); i++) {
 				let ib = config.inbounds[i];
-				if (ib && ib.type == 'tun' && ib.address !== undefined) {
+				if (ib && ib.type == 'tun') {
 					let new_ib = {};
-					for (let k in ib) if (k != 'address') new_ib[k] = ib[k];
-					new_ib.inet4_address = (ib.address && length(ib.address) > 0) ? ib.address[0] : '10.0.0.1/30';
+					for (let k in ib) if (k != 'inet4_address') new_ib[k] = ib[k];
+					if (ib.inet4_address !== undefined) {
+						new_ib.address = [ib.inet4_address];
+					} else if (!new_ib.address || length(new_ib.address) == 0) {
+						new_ib.address = ['10.0.0.1/30'];
+					}
 					push(cleaned.inbounds, new_ib);
 				} else {
 					push(cleaned.inbounds, ib);
@@ -82,37 +86,18 @@ function clean_config_outbounds(config) {
 		}
 	}
 	
-	// Ensure TUN inbound exists
+	// Ensure TUN inbound exists (1.10+: "address" array; inet4_address deprecated)
 	if (!cleaned.inbounds || length(cleaned.inbounds) == 0) {
-		// Detect sing-box version to use correct format
-		let sb_version = run_cmd('sing-box version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1');
-		let use_legacy_format = false;
-		
-		if (sb_version) {
-			sb_version = trim(sb_version);
-			let version_parts = split(sb_version, '.');
-			if (version_parts && length(version_parts) >= 2) {
-				let major = int(version_parts[0]);
-				let minor = int(version_parts[1]);
-				// Versions < 1.10.0 use "address"; 1.10+ use "inet4_address" (deprecation)
-				if (major < 1 || (major == 1 && minor < 10)) {
-					use_legacy_format = true;
-				}
-			}
-		}
-		
-		let tun_inbound = {
+		cleaned.inbounds = [{
 			type: 'tun',
 			tag: 'tun-in',
 			interface_name: 'tun1',
+			address: ['10.0.0.1/30'],
 			mtu: 1400,
 			auto_route: false,
 			sniff: true,
 			stack: 'gvisor'
-		};
-		tun_inbound[use_legacy_format ? 'address' : 'inet4_address'] = use_legacy_format ? ['10.0.0.1/30'] : '10.0.0.1/30';
-		
-		cleaned.inbounds = [tun_inbound];
+		}];
 	} else {
 		let has_tun = false;
 		for (let inbound in cleaned.inbounds) {
@@ -121,31 +106,17 @@ function clean_config_outbounds(config) {
 				break;
 			}
 		}
-		
 		if (!has_tun) {
-			let sb_version = run_cmd('sing-box version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1');
-			let use_legacy_format = false;
-			if (sb_version) {
-				sb_version = trim(sb_version);
-				let version_parts = split(sb_version, '.');
-				if (version_parts && length(version_parts) >= 2) {
-					let major = int(version_parts[0]);
-					let minor = int(version_parts[1]);
-					if (major < 1 || (major == 1 && minor < 10)) use_legacy_format = true;
-				}
-			}
 			let tun_inbound = {
 				type: 'tun',
 				tag: 'tun-in',
 				interface_name: 'tun1',
+				address: ['10.0.0.1/30'],
 				mtu: 1400,
 				auto_route: false,
 				sniff: true,
 				stack: 'gvisor'
 			};
-			tun_inbound[use_legacy_format ? 'address' : 'inet4_address'] = use_legacy_format ? ['10.0.0.1/30'] : '10.0.0.1/30';
-			
-			// Insert at beginning
 			let new_inbounds = [tun_inbound];
 			for (let inbound in cleaned.inbounds) {
 				push(new_inbounds, inbound);
