@@ -57,6 +57,11 @@ function clean_config_outbounds(config) {
 	
 	let cleaned = {};
 	for (let key in config) {
+		// Skip DNS section - it causes memory leaks (DNS handled by dnsmasq + https-dns-proxy)
+		if (key == 'dns') {
+			continue; // Do not copy DNS configuration
+		}
+		
 		if (key == 'outbounds') {
 			cleaned[key] = [];
 			for (let ob in config.outbounds) {
@@ -159,21 +164,24 @@ function clean_config_outbounds(config) {
 		}
 	}
 	
-	// Reorder outbounds: VPN tunnels first, then direct-out, then dns-out, then others
+	// Reorder outbounds: VPN tunnels first, then direct-out, then others
+	// NOTE: dns-out is NOT added (removed to prevent memory leaks)
 	// This ensures that with final='auto', sing-box will use the first VPN tunnel
 	let vpn_outbounds = [];
 	let direct_out = null;
-	let dns_out = null;
 	let other_outbounds = [];
 	
 	for (let ob in cleaned.outbounds) {
 		let tag = ob.tag || '';
 		let ob_type = ob.type || '';
 		
+		// Remove DNS outbounds - they cause memory leaks
+		if (tag == 'dns-out' || ob_type == 'dns') {
+			continue; // Skip DNS outbounds completely
+		}
+		
 		if (tag == 'direct-out') {
 			direct_out = ob;
-		} else if (tag == 'dns-out') {
-			dns_out = ob;
 		} else {
 			// Check if it's a VPN tunnel type
 			let is_vpn = (ob_type == 'vless' || ob_type == 'vmess' || ob_type == 'trojan' || 
@@ -1161,10 +1169,11 @@ function update_subscriptions() {
 		// Clean config from internal fields before saving
 		// clean_config_outbounds will:
 		// - Remove _subscription fields
-		// - Reorder outbounds: VPN tunnels first, then direct-out, then dns-out
+		// - Reorder outbounds: VPN tunnels first, then direct-out
+		// - Remove DNS configuration (dns-out, DNS rules, DNS servers) to prevent memory leaks
 		// - Set route.final to first VPN tunnel (or direct-out if no VPN)
 		// - Ensure TUN inbound exists
-		// - Ensure DNS detour for all DNS servers
+		// - DNS is handled by dnsmasq + https-dns-proxy, NOT sing-box
 		let clean_config = clean_config_outbounds(config);
 		
 		// Save updated config and subscriptions
