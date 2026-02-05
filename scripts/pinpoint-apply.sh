@@ -80,10 +80,11 @@ load_service_lists() {
 }
 
 # Load custom IPs from services.json (user-added IPs)
-# Uses temp file + while read for reliable behavior on OpenWrt ash
+# Use temp files + while read (avoids IFS/for-loop issues on OpenWrt ash)
 load_service_custom_ips() {
     local services_file="$DATA_DIR/services.json"
     local tmp_ips="/tmp/pinpoint_custom_ips.$$"
+    local tmp_sids="/tmp/pinpoint_sids.$$"
     
     if [ ! -f "$services_file" ]; then
         return 0
@@ -96,17 +97,26 @@ load_service_custom_ips() {
     
     log "Loading custom IPs from services..."
     : > "$tmp_ips"
+    jsonfilter -i "$services_file" -e '@.services[*].id' 2>/dev/null > "$tmp_sids" || true
     
-    for service_id in $(jsonfilter -i "$services_file" -e '@.services[*].id'); do
-        enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled")
-        if [ "$enabled" = "true" ]; then
-            jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].custom_ips[*]" 2>/dev/null >> "$tmp_ips"
-        fi
-    done
+    set +e
+    while read -r service_id || [ -n "$service_id" ]; do
+        service_id=$(echo "$service_id" | tr -d '\r' | xargs)
+        [ -z "$service_id" ] && continue
+        enabled=$(jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].enabled" 2>/dev/null)
+        [ "$enabled" != "true" ] && continue
+        jsonfilter -i "$services_file" -e "@.services[@.id='$service_id'].custom_ips[*]" 2>/dev/null >> "$tmp_ips"
+    done < "$tmp_sids"
+    set -e
+    rm -f "$tmp_sids"
     
     local nlines=0
     [ -f "$tmp_ips" ] && nlines=$(wc -l < "$tmp_ips" 2>/dev/null) || true
-    [ "$nlines" -gt 0 ] 2>/dev/null && log "Custom IPs file: $nlines entries"
+    if [ "$nlines" -gt 0 ] 2>/dev/null; then
+        log "Custom IPs file: $nlines entries"
+    else
+        log "Custom IPs file: 0 entries"
+    fi
     
     local count=0
     # Disable set -e for the loop: "read" returns 1 at EOF and would otherwise exit the script
