@@ -1490,10 +1490,36 @@ NFT
         ;;
     stop)
         log "Stopping routing..."
+        
+        # Remove policy routing rules
         ip rule del fwmark $MARK lookup $TABLE_ID 2>/dev/null || true
+        ip rule del fwmark 0x100 lookup $TABLE_ID 2>/dev/null || true
+        ip rule del fwmark 0x100 lookup pinpoint 2>/dev/null || true
         ip route flush table $TABLE_ID 2>/dev/null || true
+        ip route flush table pinpoint 2>/dev/null || true
+        
+        # Remove NFTables table
         nft delete table inet pinpoint 2>/dev/null || true
-        log "Routing stopped"
+        
+        # Remove dnsmasq config
+        if [ -f /etc/dnsmasq.d/pinpoint.conf ]; then
+            log "Removing dnsmasq config..."
+            rm -f /etc/dnsmasq.d/pinpoint.conf
+            /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+        fi
+        
+        # Restore firewall forward policy to ACCEPT (if it was changed)
+        if nft list chain inet fw4 forward >/dev/null 2>&1; then
+            CURRENT_POLICY=$(nft list chain inet fw4 forward 2>/dev/null | grep "policy" | awk '{print $NF}')
+            if [ "$CURRENT_POLICY" = "drop" ]; then
+                log "Restoring firewall forward policy to ACCEPT..."
+                uci set firewall.@defaults[0].forward='ACCEPT' 2>/dev/null || true
+                uci commit firewall 2>/dev/null || true
+                /etc/init.d/firewall reload >/dev/null 2>&1 || true
+            fi
+        fi
+        
+        log "Routing stopped, settings restored"
         ;;
     status)
         echo "=== Policy Routing ==="
