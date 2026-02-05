@@ -204,11 +204,9 @@ function clean_config_outbounds(config) {
 	}
 	push(new_outbounds, direct_out);
 	
-	// 3. dns-out (create if missing)
-	if (!dns_out) {
-		dns_out = { type: 'dns', tag: 'dns-out' };
-	}
-	push(new_outbounds, dns_out);
+	// 3. dns-out - REMOVED to prevent memory leaks
+	// DNS is handled by dnsmasq + https-dns-proxy, not sing-box
+	// Do NOT add dns-out outbound
 	
 	// 4. Other outbounds
 	if (other_outbounds) {
@@ -240,46 +238,22 @@ function clean_config_outbounds(config) {
 		cleaned.route.final = 'direct-out';
 	}
 	
-	// Check for DNS rule
-	let has_dns_rule = false;
+	// DNS rule - REMOVED to prevent memory leaks
+	// DNS is handled by dnsmasq + https-dns-proxy, not sing-box
+	// Remove any existing DNS rules
+	let filtered_rules = [];
 	for (let rule in cleaned.route.rules) {
-		if (rule.protocol == 'dns') {
-			has_dns_rule = true;
-			break;
+		if (rule.protocol != 'dns') {
+			push(filtered_rules, rule);
 		}
 	}
+	cleaned.route.rules = filtered_rules;
 	
-	if (!has_dns_rule) {
-		// Insert DNS rule at beginning
-		let new_rules = [{ protocol: 'dns', outbound: 'dns-out' }];
-		for (let rule in cleaned.route.rules) {
-			push(new_rules, rule);
-		}
-		cleaned.route.rules = new_rules;
-	}
-	
-	// Fix DNS configuration to prevent loopback
-	if (cleaned.dns && cleaned.dns.servers) {
-		for (let server in cleaned.dns.servers) {
-			// If DNS server doesn't have detour, add direct-out to prevent loopback
-			if (!server.detour && server.address) {
-				let server_addr = server.address;
-				if (!match(server_addr, /^127\./)) {
-					server.detour = 'direct-out';
-				} else {
-					// For local DNS (127.0.0.1), ensure it uses direct-out
-					server.detour = 'direct-out';
-				}
-			}
-		}
-	} else if (!cleaned.dns) {
-		// Create default DNS config if missing
-		cleaned.dns = {
-			servers: [
-				{ tag: 'google', address: '8.8.8.8', detour: 'direct-out' },
-				{ tag: 'local', address: '127.0.0.1', detour: 'direct-out' }
-			]
-		};
+	// DNS configuration - REMOVED to prevent memory leaks
+	// DNS is handled by dnsmasq + https-dns-proxy, not sing-box
+	// Remove DNS section completely to prevent hanging DNS over TLS connections
+	if (cleaned.dns) {
+		delete cleaned.dns;
 	}
 	
 	return cleaned;
